@@ -1,0 +1,73 @@
+<Window x:Class="BoothDesktop.Views.EventSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Event settings"
+        Width="560" Height="640"
+        MinWidth="480" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Brush.WindowBg}">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Event settings" FontSize="22" FontWeight="SemiBold"
+                       Foreground="{StaticResource Brush.Text}"/>
+            <TextBlock x:Name="SubtitleText" Margin="0,6,0,0" FontSize="14" Foreground="{StaticResource Brush.TextMuted}"
+                       TextWrapping="Wrap"
+                       Text="Start screen and pre-roll match the dslrBooth-style flow: guests see your image on “Open photobooth”, then optional video before each countdown."/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,16,0,0">
+            <StackPanel>
+                <TextBlock Text="Start screen" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+                <TextBlock Margin="0,6,0,12" TextWrapping="Wrap" FontSize="14" Foreground="{StaticResource Brush.TextMuted}"
+                           Text="Shown behind the welcome text when guests open the booth for this event. PNG or JPG recommended."/>
+
+                <Border Height="200" CornerRadius="12" Background="{StaticResource Brush.Card}"
+                        BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1" ClipToBounds="True">
+                    <Grid>
+                        <TextBlock x:Name="StartScreenPlaceholder" Text="No image — tap Browse" FontSize="15"
+                                   Foreground="{StaticResource Brush.TextMuted}" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                        <Image x:Name="StartScreenPreview" Stretch="Uniform" Visibility="Collapsed"/>
+                    </Grid>
+                </Border>
+                <TextBlock x:Name="StartScreenRelText" Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource Brush.TextMuted}"
+                           TextWrapping="Wrap" FontFamily="Consolas"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <Button Content="Browse image…" Style="{StaticResource Style.GhostButton}" MinWidth="140"
+                            Click="OnBrowseStartScreenClick"/>
+                    <Button Content="Clear" Style="{StaticResource Style.GhostButton}" MinWidth="80" Margin="12,0,0,0"
+                            Click="OnClearStartScreenClick"/>
+                </StackPanel>
+
+                <Border Height="1" Background="{StaticResource Brush.Stroke}" Margin="0,28,0,24"/>
+
+                <TextBlock Text="Video before each photo" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+                <TextBlock Margin="0,6,0,12" TextWrapping="Wrap" FontSize="14" Foreground="{StaticResource Brush.TextMuted}"
+                           Text="Plays once before the on-screen countdown for each capture (after the first-shot “get ready” screen, when enabled). MP4 or MOV."/>
+
+                <CheckBox x:Name="PlayPreRollCheck" Margin="0,0,0,12" FontSize="15" Foreground="{StaticResource Brush.Text}"
+                          Content="Play pre-roll video before each photo"/>
+                <TextBlock x:Name="PreRollRelText" FontSize="12" Foreground="{StaticResource Brush.TextMuted}"
+                           TextWrapping="Wrap" FontFamily="Consolas"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <Button Content="Browse video…" Style="{StaticResource Style.GhostButton}" MinWidth="140"
+                            Click="OnBrowsePreRollClick"/>
+                    <Button Content="Clear" Style="{StaticResource Style.GhostButton}" MinWidth="80" Margin="12,0,0,0"
+                            Click="OnClearPreRollClick"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Content="Cancel" Style="{StaticResource Style.GhostButton}" MinWidth="100" Margin="0,0,12,0" IsCancel="True" Click="OnCancelClick"/>
+            <Button Content="Save" Style="{StaticResource Style.PrimaryButton}" MinWidth="100" IsDefault="True" Click="OnSaveClick"/>
+        </StackPanel>
+    </Grid>
+</Window>

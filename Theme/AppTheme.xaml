@@ -1,0 +1,72 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="Color.BgDeep">#FF0A0A0D</Color>
+    <Color x:Key="Color.Card">#FF16161C</Color>
+    <Color x:Key="Color.CardHover">#FF1E1E28</Color>
+    <Color x:Key="Color.Accent">#FFD4AF37</Color>
+    <Color x:Key="Color.AccentSoft">#66D4AF37</Color>
+    <SolidColorBrush x:Key="Brush.WindowBg" Color="{StaticResource Color.BgDeep}"/>
+    <SolidColorBrush x:Key="Brush.Card" Color="{StaticResource Color.Card}"/>
+    <SolidColorBrush x:Key="Brush.CardHover" Color="{StaticResource Color.CardHover}"/>
+    <SolidColorBrush x:Key="Brush.Accent" Color="{StaticResource Color.Accent}"/>
+    <SolidColorBrush x:Key="Brush.Text" Color="#FFF5F3FA"/>
+    <SolidColorBrush x:Key="Brush.TextMuted" Color="#FF908CA3"/>
+    <SolidColorBrush x:Key="Brush.Stroke" Color="#FF2E2E3A"/>
+
+    <LinearGradientBrush x:Key="Brush.OpeningGlow" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#40302050" Offset="0"/>
+        <GradientStop Color="#FF0A0A0D" Offset="0.55"/>
+        <GradientStop Color="#15081528" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="Brush.FakeLiveView" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF1a1525" Offset="0"/>
+        <GradientStop Color="#FF252035" Offset="0.5"/>
+        <GradientStop Color="#FF151820" Offset="1"/>
+    </LinearGradientBrush>
+
+    <Style x:Key="Style.HeroTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="56"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush.Text}"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="Style.Subtitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="22"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="Style.PrimaryButton" TargetType="Button">
+        <Setter Property="Foreground" Value="#FF1A1508"/>
+        <Setter Property="Background" Value="{StaticResource Brush.Accent}"/>
+        <Setter Property="FontSize" Value="20"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Padding" Value="40,18"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="16" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.92"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Style.GhostButton" TargetType="Button" BasedOn="{StaticResource Style.PrimaryButton}">
+        <Setter Property="Foreground" Value="{StaticResource Brush.Text}"/>
+        <Setter Property="Background" Value="#332E2E3A"/>
+    </Style>
+</ResourceDictionary>

@@ -1,0 +1,14 @@
+<UserControl x:Class="BoothDesktop.Controls.LayoutMiniPreview"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="240" d:DesignWidth="200">
+    <Viewbox Stretch="Uniform" MaxHeight="240" HorizontalAlignment="Center">
+        <Border x:Name="OuterFrame" Width="120" Height="180" CornerRadius="14"
+                Background="#252030" BorderBrush="#66D4AF37" BorderThickness="1.5">
+            <Canvas x:Name="SlotCanvas" Width="120" Height="180" ClipToBounds="True"/>
+        </Border>
+    </Viewbox>
+</UserControl>

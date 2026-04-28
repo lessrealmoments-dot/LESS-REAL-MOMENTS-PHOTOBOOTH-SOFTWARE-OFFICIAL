@@ -1,0 +1,282 @@
+<UserControl x:Class="BoothDesktop.Views.PhotoboothFlowView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:controls="clr-namespace:BoothDesktop.Controls"
+             mc:Ignorable="d"
+             d:DesignHeight="900" d:DesignWidth="1400"
+             Background="{StaticResource Brush.WindowBg}">
+    <Grid>
+        <!-- Opening: row 0 is operator-only (never covered by invisible tap layer) -->
+        <Grid x:Name="PanelOpening" Visibility="Visible" Background="{StaticResource Brush.OpeningGlow}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Background="#59000000" Padding="12,10" BorderBrush="#55D4AF37" BorderThickness="0,0,0,1">
+                <DockPanel LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Text="Operator" VerticalAlignment="Center"
+                               Foreground="{StaticResource Brush.TextMuted}" FontSize="13" Opacity="0.9"/>
+                    <Button DockPanel.Dock="Right" Content="← Back to Events" MinHeight="40" MinWidth="160"
+                            FontSize="15" FontWeight="SemiBold"
+                            Foreground="{StaticResource Brush.Text}" Background="#4D252030"
+                            BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1" Padding="16,8" Cursor="Hand"
+                            Click="OnExitClick"
+                            ToolTip="Leave guest screen and return to Events (layouts, import ZIP, pick another event)">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="10" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bd" Property="Background" Value="#66252035"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="bd" Property="Background" Value="#55201828"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </DockPanel>
+            </Border>
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Image x:Name="OpeningBackgroundImage" Grid.RowSpan="3" Stretch="UniformToFill"
+                       Visibility="Collapsed" Opacity="0.42" IsHitTestVisible="False"/>
+                <Viewbox Grid.Row="1" MaxWidth="720" MaxHeight="200">
+                    <TextBlock x:Name="OpeningTitle" Text="Welcome" Style="{StaticResource Style.HeroTitle}"/>
+                </Viewbox>
+                <TextBlock Grid.Row="2" VerticalAlignment="Top" Margin="0,24,0,0" Style="{StaticResource Style.Subtitle}"
+                           Text="Tap anywhere below to begin"/>
+                <Button Opacity="0" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                        Click="OnOpeningTap" Grid.RowSpan="3"/>
+                <TextBlock x:Name="OpeningPulseHint" Grid.Row="2" VerticalAlignment="Bottom" Margin="0,0,0,80"
+                           Text="Tap to start" FontSize="18" Foreground="{StaticResource Brush.Accent}"
+                           HorizontalAlignment="Center" Opacity="0.85" RenderTransformOrigin="0.5,0.5">
+                    <TextBlock.RenderTransform>
+                        <ScaleTransform x:Name="OpeningPulseScale" ScaleX="1" ScaleY="1"/>
+                    </TextBlock.RenderTransform>
+                    <TextBlock.Triggers>
+                        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                            <BeginStoryboard>
+                                <Storyboard RepeatBehavior="Forever">
+                                    <DoubleAnimation Storyboard.TargetName="OpeningPulseScale" Storyboard.TargetProperty="ScaleX"
+                                                   To="1.08" Duration="0:0:1.1" AutoReverse="True"/>
+                                    <DoubleAnimation Storyboard.TargetName="OpeningPulseScale" Storyboard.TargetProperty="ScaleY"
+                                                   To="1.08" Duration="0:0:1.1" AutoReverse="True"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </TextBlock.Triggers>
+                </TextBlock>
+            </Grid>
+        </Grid>
+
+        <!-- Layout picker -->
+        <Grid x:Name="PanelLayoutPick" Visibility="Collapsed" Margin="40">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="0,0,0,28">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Choose your layout" FontSize="36" FontWeight="SemiBold"
+                           Foreground="{StaticResource Brush.Text}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <Button Grid.Column="1" Content="← Back to Events" MinHeight="40" MinWidth="150" FontSize="14" FontWeight="SemiBold"
+                        VerticalAlignment="Center" Margin="16,0,0,0" Padding="16,8" Cursor="Hand" Click="OnExitClick"
+                        Foreground="{StaticResource Brush.Text}" Background="#4D252030"
+                        BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1"
+                        ToolTip="Return to Events — “Layouts for this event…” is on each event card">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd2" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd2" Property="Background" Value="#66252035"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+            <Grid Grid.Row="1">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="LayoutList">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="3"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Margin="12" Padding="0" Click="OnLayoutCardClick" Tag="{Binding}"
+                                    Background="Transparent" BorderThickness="0" Cursor="Hand">
+                                <Border CornerRadius="20" Background="{StaticResource Brush.Card}" BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1" Width="380" Height="480">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="20" ShadowDepth="0" Opacity="0.3" Color="#000000"/>
+                                    </Border.Effect>
+                                    <Grid>
+                                        <Grid Margin="16,16,16,72" Height="280" VerticalAlignment="Top">
+                                            <controls:LayoutMiniPreview PreviewKey="{Binding PreviewKey}"
+                                                                       VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                <controls:LayoutMiniPreview.Style>
+                                                    <Style TargetType="controls:LayoutMiniPreview">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasPreviewFile}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </controls:LayoutMiniPreview.Style>
+                                            </controls:LayoutMiniPreview>
+                                            <Image Stretch="Uniform" MaxHeight="270" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                   Source="{Binding ResolvedPreviewPath, Converter={StaticResource FilePathToImage}}">
+                                                <Image.Style>
+                                                    <Style TargetType="Image">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasPreviewFile}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Image.Style>
+                                            </Image>
+                                        </Grid>
+                                        <StackPanel VerticalAlignment="Bottom" Margin="20">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+                                            <TextBlock Foreground="{StaticResource Brush.TextMuted}" FontSize="15" Margin="0,6,0,0"
+                                                       Text="{Binding ShotCount, StringFormat={}{0} photos}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <TextBlock x:Name="LayoutPickEmptyHint" Visibility="Collapsed" TextAlignment="Center"
+                       VerticalAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="520"
+                       FontSize="16" Foreground="{StaticResource Brush.TextMuted}" Margin="24"
+                       Text="No layouts are enabled for this event. Exit photobooth, then on Events use “Layouts for this event…” to choose which packs appear in the picker."/>
+            </Grid>
+        </Grid>
+
+        <!-- Capture sequence -->
+        <Grid x:Name="PanelCapture" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="#66000000" Padding="20,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" x:Name="LimitsLine" FontSize="16" Foreground="{StaticResource Brush.TextMuted}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    <StackPanel Grid.Column="1" x:Name="ShotDotsHost" Orientation="Horizontal"
+                                HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12,0"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button Content="Cancel session" Style="{StaticResource Style.GhostButton}" Padding="20,10" FontSize="14"
+                                Margin="0,0,12,0" Click="OnCancelSessionClick"/>
+                        <Button Content="Exit" Style="{StaticResource Style.GhostButton}" Padding="20,10" FontSize="14"
+                                Click="OnExitClick"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" Margin="32">
+                <Border x:Name="LivePreviewFrame" CornerRadius="24" ClipToBounds="True" Background="{StaticResource Brush.FakeLiveView}"
+                        MaxWidth="1000" MaxHeight="700" HorizontalAlignment="Center" VerticalAlignment="Center" BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1">
+                    <Grid>
+                        <Border Background="{StaticResource Brush.FakeLiveView}"/>
+                        <Image x:Name="LivePreviewImage" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LivePreviewHint" Text="Waiting for camera…&#x0a;Start sony_bridge.exe — live feed from&#x0a;http://127.0.0.1:18080/live.jpg"
+                                   TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{StaticResource Brush.TextMuted}" FontSize="17" LineHeight="24"/>
+                        <!-- Intro overlay -->
+                        <Border x:Name="IntroOverlay" Background="#CC000000" Visibility="Collapsed">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock x:Name="IntroLabel" Text="Intro video" FontSize="28" Foreground="{StaticResource Brush.Accent}" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Countdown starts next (optional pre-roll in Event settings)" FontSize="15" Foreground="{StaticResource Brush.TextMuted}" Margin="0,12,0,0" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="420"/>
+                            </StackPanel>
+                        </Border>
+                        <!-- Countdown -->
+                        <TextBlock x:Name="CountdownText" Visibility="Collapsed" Text="3" FontSize="160" FontWeight="Bold"
+                                   Foreground="{StaticResource Brush.Text}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.Effect>
+                                <DropShadowEffect BlurRadius="8" ShadowDepth="0" Color="#000000" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                        <!-- Flash -->
+                        <Border x:Name="FlashOverlay" Background="White" Opacity="0" IsHitTestVisible="False"/>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,8,0,24" MaxWidth="980">
+                <TextBlock x:Name="LiveBridgeStatus" Text="" FontSize="15" Foreground="{StaticResource Brush.Accent}"
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBlock x:Name="ShotStatusLine" Text="" FontSize="20" Foreground="{StaticResource Brush.TextMuted}"
+                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
+                <TextBlock x:Name="LiveDiagnosticsLine" Text="" FontSize="12" Foreground="{StaticResource Brush.TextMuted}"
+                           HorizontalAlignment="Center" Margin="0,14,0,0" TextAlignment="Left" TextWrapping="Wrap"
+                           Opacity="0.92" LineHeight="18"/>
+            </StackPanel>
+
+            <Grid x:Name="PreRollOverlay" Grid.RowSpan="3" Visibility="Collapsed" Background="#E608040C" Panel.ZIndex="80">
+                <MediaElement x:Name="PreRollVideo" LoadedBehavior="Manual" UnloadedBehavior="Manual" Stretch="Uniform"
+                              MediaEnded="OnPreRollMediaEnded" MediaFailed="OnPreRollMediaFailed"/>
+            </Grid>
+        </Grid>
+
+        <!-- Final -->
+        <Grid x:Name="PanelFinal" Visibility="Collapsed" Margin="40">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock Text="Your photos" FontSize="36" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+            <Border Grid.Row="1" CornerRadius="24" Background="{StaticResource Brush.Card}" Margin="0,24,0,24" Padding="24" MaxWidth="900" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Viewbox Stretch="Uniform" MaxHeight="520">
+                    <Grid Width="400" Height="600">
+                        <Border Background="{StaticResource Brush.FakeLiveView}" CornerRadius="12"/>
+                        <Image x:Name="FinalPreviewImage" Stretch="Uniform" Visibility="Collapsed"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="400" MaxHeight="600"/>
+                        <TextBlock x:Name="FinalPreviewPlaceholder" Text="Building your print…" TextAlignment="Center"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center"
+                                   Foreground="{StaticResource Brush.TextMuted}" FontSize="16" TextWrapping="Wrap" Margin="20"/>
+                    </Grid>
+                </Viewbox>
+            </Border>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="New guest" Style="{StaticResource Style.GhostButton}" Margin="0,0,16,0" Click="OnNewGuestClick"/>
+                <Button Content="Share" Style="{StaticResource Style.GhostButton}" Margin="0,0,16,0" Click="OnShareClick"/>
+                <Button Content="Print" Style="{StaticResource Style.PrimaryButton}" Click="OnPrintClick"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

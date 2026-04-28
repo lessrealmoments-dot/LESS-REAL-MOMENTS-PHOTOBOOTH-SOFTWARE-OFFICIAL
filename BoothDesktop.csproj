@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="Assets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Keep bridge runtime co-located with BoothDesktop output.
+    This removes manual copy steps and avoids stale locked binaries.
+  -->
+  <PropertyGroup>
+    <NativeBridgeReleaseDir>$(MSBuildProjectDirectory)\..\native-poc\build\Release</NativeBridgeReleaseDir>
+  </PropertyGroup>
+
+  <Target Name="SyncSonyBridgeRuntime" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <!--
+      Bridge + Booth load DLLs from OutDir. taskkill /T clears all matching PIDs; then wait for handles to drop.
+      (PowerShell-only kill was sometimes leaving locks when multiple sony_bridge.exe were running.)
+    -->
+    <!-- Redirect taskkill output: "ERROR: ... not found" is parsed as a build error by MSBuild. -->
+    <Exec Command="cmd /c &quot;taskkill /F /IM sony_bridge.exe /T &gt;nul 2&gt;&amp;1&quot;" IgnoreExitCode="true" />
+    <Exec Command="cmd /c &quot;taskkill /F /IM BoothDesktop.exe /T &gt;nul 2&gt;&amp;1&quot;" IgnoreExitCode="true" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;Start-Sleep -Seconds 2&quot;" IgnoreExitCode="true" />
+
+    <ItemGroup>
+      <BridgeRuntimeFiles Include="$(NativeBridgeReleaseDir)\sony_bridge.exe" Condition="Exists('$(NativeBridgeReleaseDir)\sony_bridge.exe')" />
+      <BridgeRuntimeFiles Include="$(NativeBridgeReleaseDir)\Cr_Core.dll" Condition="Exists('$(NativeBridgeReleaseDir)\Cr_Core.dll')" />
+      <BridgeRuntimeFiles Include="$(NativeBridgeReleaseDir)\monitor_protocol.dll" Condition="Exists('$(NativeBridgeReleaseDir)\monitor_protocol.dll')" />
+      <BridgeRuntimeFiles Include="$(NativeBridgeReleaseDir)\monitor_protocol_pf.dll" Condition="Exists('$(NativeBridgeReleaseDir)\monitor_protocol_pf.dll')" />
+      <BridgeAdapterFiles Include="$(NativeBridgeReleaseDir)\CrAdapter\**\*" Condition="Exists('$(NativeBridgeReleaseDir)\CrAdapter')" />
+    </ItemGroup>
+
+    <Message Importance="high" Text="SyncSonyBridgeRuntime: source=$(NativeBridgeReleaseDir) out=$(OutDir)" />
+    <Copy SourceFiles="@(BridgeRuntimeFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" ContinueOnError="WarnAndContinue" />
+    <Copy SourceFiles="@(BridgeAdapterFiles)" DestinationFolder="$(OutDir)CrAdapter\%(RecursiveDir)" SkipUnchangedFiles="false" ContinueOnError="WarnAndContinue" />
+  </Target>
+
+</Project>

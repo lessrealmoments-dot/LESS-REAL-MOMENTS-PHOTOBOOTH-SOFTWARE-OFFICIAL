@@ -1,0 +1,21 @@
+bin/
+obj/
+_build_verify_out/
+
+# User and IDE files
+*.user
+*.suo
+*.userprefs
+*.tmp
+*.log
+*.cache
+
+# VS / Rider
+.vs/
+.idea/
+
+# Build artifacts
+*.pdb
+*.ilk
+*.nupkg
+TestResults/
