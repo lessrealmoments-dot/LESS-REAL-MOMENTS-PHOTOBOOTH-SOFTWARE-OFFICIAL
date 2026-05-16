@@ -2,6 +2,8 @@
 
 Use this doc to pick up work after a break. It reflects the **repo as of early 2026** and the **dslrBooth-style layout ZIP** workflow (each pack: `template.xml` + `preview.png` + assets).
 
+For quick session continuity (goal + last checkpoint), open `docs/PROJECT_HANDOFF.md` first.
+
 ---
 
 ## Checkpoint — what already works
