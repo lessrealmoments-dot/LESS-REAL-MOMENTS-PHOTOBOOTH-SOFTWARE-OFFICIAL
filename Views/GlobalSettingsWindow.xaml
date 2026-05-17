@@ -348,6 +348,15 @@
                                FontSize="13" Margin="16,0,8,0"/>
                     <ComboBox x:Name="SharpeningCombo" Grid.Column="3" Style="{StaticResource Style.DarkComboBox}" Height="32"/>
                 </Grid>
+
+                <Border Height="1" Background="{StaticResource Brush.Stroke}" Margin="0,24,0,16"/>
+                <TextBlock Text="Image quality (composite engine)" FontSize="17" FontWeight="SemiBold"
+                           Foreground="{StaticResource Brush.Text}"/>
+                <CheckBox x:Name="UseVipsCompositorCheck" Style="{StaticResource Style.DarkCheckBox}"
+                          Content="Use libvips compositor (Lanczos3, RAM-efficient)"
+                          ToolTip="When on, final/composite.png is rendered via libvips with Lanczos3 resampling. Falls back to the legacy WPF compositor automatically if libvips fails to load."/>
+                <TextBlock x:Name="VipsStatusText" Margin="20,0,0,0" FontSize="12"
+                           Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"/>
             </StackPanel>
         </ScrollViewer>
 

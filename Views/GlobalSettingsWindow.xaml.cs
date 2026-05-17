@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using BoothDesktop.Controls;
 using BoothDesktop.Models;
 using BoothDesktop.Services;
+using BoothDesktop.Services.Vips;
 using Microsoft.Win32;
 
 namespace BoothDesktop.Views;
@@ -62,6 +63,8 @@ public partial class GlobalSettingsWindow : Window
         MaxPrintsSessionText.Text = pb.MaxPrintsPerSession.ToString();
         PrintDialogMaxText.Text = pb.PrintDialogMaxCopies.ToString();
         PopulateSharpeningCombo(pb.PrintSharpening);
+        UseVipsCompositorCheck.IsChecked = pb.UseVipsCompositor;
+        RefreshVipsStatusHint();
         UpdateLimitPrintsPanelEnabled();
 
         PopulateAlignmentSamples();
@@ -77,6 +80,15 @@ public partial class GlobalSettingsWindow : Window
         foreach (var s in new[] { "None", "Low", "Medium", "High" })
             SharpeningCombo.Items.Add(s);
         SharpeningCombo.SelectedItem = selected is "None" or "Low" or "Medium" or "High" ? selected : "Medium";
+    }
+
+    private void RefreshVipsStatusHint()
+    {
+        // IsAvailable triggers the libvips probe on first access; cheap on subsequent calls.
+        var available = VipsTemplateCompositor.IsAvailable;
+        VipsStatusText.Text = available
+            ? "libvips loaded. When enabled, composites use Lanczos3 + JPEG shrink-on-load. Falls back to the WPF compositor automatically if a render fails."
+            : "libvips native binaries NOT available on this machine — the checkbox can be flipped, but composites will keep using the WPF compositor.";
     }
 
     private void WireAlignmentControls(int slot)
@@ -624,7 +636,8 @@ public partial class GlobalSettingsWindow : Window
             MaxPrintsPerEvent = maxEvent,
             MaxPrintsPerSession = maxSession,
             PrintDialogMaxCopies = maxDlg,
-            PrintSharpening = SharpeningCombo.SelectedItem as string ?? "Medium"
+            PrintSharpening = SharpeningCombo.SelectedItem as string ?? "Medium",
+            UseVipsCompositor = UseVipsCompositorCheck.IsChecked == true
         };
 
         if (!GlobalSettingsService.TrySave(_draft, out var error))

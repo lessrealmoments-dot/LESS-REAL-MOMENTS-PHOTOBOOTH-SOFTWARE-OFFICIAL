@@ -64,15 +64,15 @@ Standard dslrBooth export ZIPs are the source of truth:
 6. **NOT YET** — No sharpening pass (user explicitly deferred; Lanczos3 alone meets the bar).
 7. **NOT YET** — `final/composite_master.png` 2× export (was Phase 2 master goal; deprioritised pending real demand from digital/gallery track).
 
-**Phase 2c — libvips polish & default switch (NEXT)**
+**Phase 2c — libvips polish & default switch (IN PROGRESS)**
 
 Pre-requisites for flipping `UseVipsCompositor` to `true` by default:
 
-1. **Cap libvips operation cache** so peak working set stays flat across long sessions (`NetVips.Cache.MaxMem = 50_000_000`). Observed climb during A/B: 134 → 200 → 260 MB across 3 consecutive composes in the same process.
-2. **UI toggle** for `UseVipsCompositor` in `Views/GlobalSettingsWindow.xaml` so QA / operators don't have to edit `global_settings.json` by hand.
-3. **Port `OverlayHoleBounds` to libvips** (`vips_project` on the alpha band → bounding box) so the Vips path is fully WPF-free. Today it loads the overlay via WPF `BitmapImage` once per compose just for the alpha scan.
-4. **Soak test** on the booth PC: 50+ back-to-back composes at strip + 4R sizes; confirm no RAM growth, no file lock issues, no driver / OOM regressions.
-5. **Flip default** `UseVipsCompositor = true` after the soak. Mark `TemplateCompositor.cs` (WPF) as a future deletion candidate.
+1. **DONE** — Cap libvips operation cache (`Cache.MaxMem = 50 MB`, `Cache.Max = 20 ops` in `VipsTemplateCompositor._available`). Verified: peak WS went from 134→200→260 MB (unbounded) to 126→160→162→166 MB (steady) across 4 back-to-back composes.
+2. **DONE** — UI toggle in Global Settings → "Image quality (composite engine)" section with `UseVipsCompositor` checkbox + live libvips probe status hint. Persisted through `GlobalSettingsService.TrySave`.
+3. **TODO** — Port `OverlayHoleBounds` to libvips (`vips_project` on the alpha band → bounding box) so the Vips path is fully WPF-free. Today it loads the overlay via WPF `BitmapImage` once per compose just for the alpha scan.
+4. **TODO** — Soak test on the booth PC: 50+ back-to-back composes at strip + 4R sizes; confirm no RAM growth, no file lock issues, no driver / OOM regressions.
+5. **TODO** — Flip default `UseVipsCompositor = true` after the soak. Mark `TemplateCompositor.cs` (WPF) as a future deletion candidate.
 
 **Still to build (priority order)**
 

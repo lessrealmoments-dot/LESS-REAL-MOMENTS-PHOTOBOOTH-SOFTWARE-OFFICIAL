@@ -3,7 +3,7 @@
 **Read first when continuing work on sharper composites / libvips.**  
 Companion docs: `PROJECT_HANDOFF.md` (session checkpoint), `PHOTOBOOTH_PHASES.md` (roadmap).
 
-Last updated: **2026-05-17** (Phase 2 NetVips compositor shipped behind feature flag)
+Last updated: **2026-05-17** (Phase 2 NetVips compositor shipped behind feature flag; Phase 2c cache cap + UI toggle shipped)
 
 ---
 
@@ -126,7 +126,7 @@ Install folder used for analysis: `D:\PHOTOBOOTH SOFTWARE\dslrBooth ONLINE`
 
 ---
 
-## Phase 2 NetVips compositor ó SHIPPED 2026-05-17
+## Phase 2 NetVips compositor ù SHIPPED 2026-05-17
 
 The libvips/NetVips backend is wired in behind a feature flag. WPF compositor stays as the default and as the automatic fallback if libvips fails to load or a render throws.
 
@@ -138,7 +138,7 @@ The libvips/NetVips backend is wired in behind a feature flag. WPF compositor st
 | `Services/Compositors.cs` | Facade that picks WPF or Vips per `PrintBehavior.UseVipsCompositor` and falls back to WPF on Vips probe failure or render exception. |
 | `Models/BoothModels.cs` | New `PrintBehavior.UseVipsCompositor` (default `false`). |
 | `Services/CompositeQualityDiagnostics.cs` | New primitive (int) overloads so non-WPF compositors don't need `BitmapSource`. |
-| `Services/SessionWorkspace.cs` | `TryComposeFinalPrint` calls `Compositors.TryCompose(preferVips, Ö)`. |
+| `Services/SessionWorkspace.cs` | `TryComposeFinalPrint` calls `Compositors.TryCompose(preferVips, ù)`. |
 | `tools/SampleLayoutCheck/Program.cs` | New flags: `--vips`, `--wpf`, `--ab`, `--runs=N`. `--ab` renders both engines, prints MAE/RMSE/max diff/PSNR, file sizes. |
 
 ### Packages
@@ -148,7 +148,7 @@ The libvips/NetVips backend is wired in behind a feature flag. WPF compositor st
 <PackageReference Include="NetVips.Native.win-x64" Version="8.18.2" />
 ```
 
-`libvips-42.dll` lands in `bin\Ö\runtimes\win-x64\native\` automatically (NuGet RID convention). .NET 8's runtime resolver loads it on first NetVips call.
+`libvips-42.dll` lands in `bin\ù\runtimes\win-x64\native\` automatically (NuGet RID convention). .NET 8's runtime resolver loads it on first NetVips call.
 
 ### How to flip the flag
 
@@ -160,8 +160,8 @@ Edit `%LOCALAPPDATA%\LessRealBooth\global_settings.json`:
 }
 ```
 
-Restart the app. Verify with `[Composite]` log line: `engine=Vips session=Ö`.
-If libvips fails to load, the next log line is `[Compositors] UseVipsCompositor=true but libvips is unavailable Ö falling back to WPF`.
+Restart the app. Verify with `[Composite]` log line: `engine=Vips session=ù`.
+If libvips fails to load, the next log line is `[Compositors] UseVipsCompositor=true but libvips is unavailable ù falling back to WPF`.
 
 ### A/B smoke
 
@@ -180,18 +180,33 @@ Outputs `D:\diff.wpf.png`, `D:\diff.vips.png`, and a pixel-diff summary.
 | Vips | 1012 ms | 182 MB | Lanczos3, RGBA `Composite2`, per-photo decode cache |
 | Pixel diff (WPF?Vips) | MAE 2.37, RMSE 6.46, max 144, **PSNR 31.9 dB** | | Near-identical structural output; kernel differences only |
 
-Vips runs ~25 % slower wall time and uses ~50 MB more RSS than WPF on this layout. Quality (Lanczos3 vs Fant) is the win ó visually identical layout, sharper resampling at heavy downscales (`coverScale ? 0.15`). Both engines complete well under the 3 s print budget.
+Vips runs ~25 % slower wall time and uses ~50 MB more RSS than WPF on this layout. Quality (Lanczos3 vs Fant) is the win ù visually identical layout, sharper resampling at heavy downscales (`coverScale ? 0.15`). Both engines complete well under the 3 s print budget.
 
-### Known limitations / Phase 3 candidates
+### Phase 2c polish (PARTIALLY SHIPPED 2026-05-17)
+
+| Item | Status | Notes |
+|---|---|---|
+| **Cap libvips operation cache** | **SHIPPED** | `Cache.MaxMem = 50 MB`, `Cache.Max = 20 ops` set in `VipsTemplateCompositor._available` Lazy probe. Verified: peak WS went from 134->200->260 MB (unbounded) to 126->160->162->166 MB (steady ~165 MB) across 4 back-to-back composes. Logged at init: `libvips ready version=8.18.2 cacheMaxMem=50MB cacheMaxOps=20`. |
+| **UI toggle in Global Settings** | **SHIPPED** | New "Image quality (composite engine)" section in `Views/GlobalSettingsWindow.xaml` with `UseVipsCompositorCheck` checkbox. Status hint underneath shows libvips probe result. Saved through the existing `GlobalSettingsService.TrySave` path. |
+| **Port `OverlayHoleBounds` to libvips** | TODO | Today the Vips path loads the overlay once per compose via WPF `BitmapImage` just for the alpha scan. Port to `vips_project` on the alpha band so Vips path is fully WPF-free. |
+| **Soak test on booth PC** | TODO | 50+ back-to-back composes at strip + 4R; confirm cache cap holds, no driver/OOM regressions. |
+| **Flip default `UseVipsCompositor = true`** | TODO | After soak. Mark `TemplateCompositor.cs` (WPF) as a future deletion candidate. |
+
+### Out of scope (deliberately)
+
+- No sharpening pass; Lanczos3 alone meets the quality bar requested.
+- No `composite_master.png` 2x export until digital/gallery track demands it.
+
+### Legacy Phase 3 notes (superseded)
 
 1. `OverlayHoleBounds` still uses WPF `BitmapSource` for alpha scan on the Vips path (one cheap load per compose). Port to libvips `vips_project` to make Vips path fully WPF-free.
 2. libvips operation cache grows over consecutive composes in the same process (peak WS climbs 134?200?260 MB across 3 runs). Cap it via `NetVips.Cache.MaxMem = 50_000_000` if it bites in long sessions.
-3. UI toggle for `UseVipsCompositor` not yet added ó flip via JSON for now.
+3. UI toggle for `UseVipsCompositor` not yet added ù flip via JSON for now.
 4. No A/B sharpening pass; Lanczos3 alone already meets the quality bar requested.
 
 ---
 
-## Original plan (Phases 0ñ4) ó superseded by the above where overlapping
+## Original plan (Phases 0ù4) ù superseded by the above where overlapping
 
 ### Strategy: orchestrator + dual backend + fallback
 

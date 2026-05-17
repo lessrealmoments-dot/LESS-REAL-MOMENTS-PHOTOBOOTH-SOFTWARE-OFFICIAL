@@ -31,6 +31,17 @@ public static class VipsTemplateCompositor
     /// <summary>Floor for the requested decode edge.</summary>
     private const int PhotoMinDecodeEdge = 512;
 
+    /// <summary>Hard ceiling on libvips' operation cache memory budget (bytes). Without this the
+    /// cache grows unbounded over a long session and peak working set climbs each composite
+    /// (observed: 134 -> 200 -> 260 MB across 3 back-to-back composes during A/B testing).
+    /// 50 MB is enough to cache the most expensive recently-decoded JPEG tiles without bloating
+    /// RSS in a multi-hour booth shift.</summary>
+    private const ulong VipsCacheMaxMemBytes = 50UL * 1024 * 1024;
+
+    /// <summary>Cap on the number of recently used libvips operations cached. Default is 100;
+    /// our composites only chain a handful of ops so a small cap is plenty.</summary>
+    private const int VipsCacheMaxOps = 20;
+
     private static readonly Lazy<bool> _available = new(() =>
     {
         try
@@ -39,7 +50,13 @@ public static class VipsTemplateCompositor
             using var probe = Image.Black(1, 1);
             var ok = probe.Width == 1 && probe.Height == 1;
             if (ok)
-                RuntimeLog.Info(LogSource, $"libvips ready version={NetVips.NetVips.Version(0)}.{NetVips.NetVips.Version(1)}.{NetVips.NetVips.Version(2)}");
+            {
+                Cache.MaxMem = VipsCacheMaxMemBytes;
+                Cache.Max = VipsCacheMaxOps;
+                RuntimeLog.Info(LogSource,
+                    $"libvips ready version={NetVips.NetVips.Version(0)}.{NetVips.NetVips.Version(1)}.{NetVips.NetVips.Version(2)} " +
+                    $"cacheMaxMem={VipsCacheMaxMemBytes / (1024 * 1024)}MB cacheMaxOps={VipsCacheMaxOps}");
+            }
             return ok;
         }
         catch (Exception ex)
