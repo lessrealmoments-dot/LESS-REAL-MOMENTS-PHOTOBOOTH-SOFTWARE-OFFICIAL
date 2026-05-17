@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using BoothDesktop.Models;
 using BoothDesktop.Services;
 using BoothDesktop.Views;
@@ -12,6 +12,7 @@ public partial class MainWindow : Window, INavigationHost
         InitializeComponent();
         Shell.Content = new EventsView(this);
         Loaded += MainWindow_OnLoaded;
+        Closing += (_, _) => SonyBridgeLauncher.ShutdownAllForAppExit();
     }
 
     private async void MainWindow_OnLoaded(object sender, RoutedEventArgs e)

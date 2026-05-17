@@ -1,9 +1,10 @@
 <Window x:Class="BoothDesktop.Views.GlobalSettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:BoothDesktop.Controls"
         Title="Global settings"
-        Width="640" Height="420"
-        MinWidth="560" MinHeight="360"
+        Width="820" Height="860"
+        MinWidth="720" MinHeight="680"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource Brush.WindowBg}">
     <Grid Margin="24">
@@ -18,50 +19,337 @@
                        Foreground="{StaticResource Brush.Text}"/>
             <TextBlock Margin="0,6,0,0" FontSize="14" Foreground="{StaticResource Brush.TextMuted}"
                        TextWrapping="Wrap"
-                       Text="Set the default printer and where booth files are saved (events, originals, prints, logs)."/>
+                       Text="Storage location and print setup. Both printer slots can use the same HiTi queue with different driver preferences (4×6 vs strip)."/>
         </StackPanel>
 
-        <StackPanel Grid.Row="1" Margin="0,18,0,0">
-            <TextBlock Text="Storage location" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
-            <TextBlock Margin="0,6,0,10" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"
-                       Text="Choose the root folder for LessRealBooth data. This folder contains events/, catalog/, logs/."/>
+        <ScrollViewer Grid.Row="1" Margin="0,18,0,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="Storage location" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+                <TextBlock Margin="0,6,0,10" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"
+                           Text="Root folder for events/, catalog/, logs/."/>
 
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBox x:Name="StorageRootText"
-                         Height="34"
-                         Padding="10,6"
-                         VerticalContentAlignment="Center"
-                         Background="{StaticResource Brush.Card}"
-                         Foreground="{StaticResource Brush.Text}"
-                         BorderBrush="{StaticResource Brush.Stroke}"
-                         BorderThickness="1"/>
-                <Button Grid.Column="1" Content="Browse…" Style="{StaticResource Style.GhostButton}" Margin="10,0,0,0"
-                        MinWidth="110" Click="OnBrowseStorageClick"/>
-                <Button Grid.Column="2" Content="Default" Style="{StaticResource Style.GhostButton}" Margin="10,0,0,0"
-                        MinWidth="90" Click="OnUseDefaultStorageClick"/>
-            </Grid>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="StorageRootText"
+                             Height="34"
+                             Padding="10,6"
+                             VerticalContentAlignment="Center"
+                             Background="{StaticResource Brush.Card}"
+                             Foreground="{StaticResource Brush.Text}"
+                             BorderBrush="{StaticResource Brush.Stroke}"
+                             BorderThickness="1"/>
+                    <Button Grid.Column="1" Content="Browse…" Style="{StaticResource Style.GhostButton}" Margin="10,0,0,0"
+                            MinWidth="110" Click="OnBrowseStorageClick"/>
+                    <Button Grid.Column="2" Content="Default" Style="{StaticResource Style.GhostButton}" Margin="10,0,0,0"
+                            MinWidth="90" Click="OnUseDefaultStorageClick"/>
+                </Grid>
 
-            <TextBlock x:Name="StorageHintText" Margin="0,8,0,0" FontSize="12" FontFamily="Consolas"
-                       Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"/>
+                <TextBlock x:Name="StorageHintText" Margin="0,8,0,0" FontSize="12" FontFamily="Consolas"
+                           Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"/>
 
-            <Border Height="1" Background="{StaticResource Brush.Stroke}" Margin="0,24,0,20"/>
+                <Border Height="1" Background="{StaticResource Brush.Stroke}" Margin="0,24,0,16"/>
 
-            <TextBlock Text="Default printer" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
-            <TextBlock Margin="0,6,0,10" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"
-                       Text="Select your preferred printer (used by print actions). Keep '(System default)' to follow Windows default printer."/>
-            <ComboBox x:Name="PrinterCombo"
-                      Height="34"
-                      Padding="8,4"
-                      Background="{StaticResource Brush.Card}"
-                      Foreground="{StaticResource Brush.Text}"
-                      BorderBrush="{StaticResource Brush.Stroke}"
-                      BorderThickness="1"/>
-        </StackPanel>
+                <TextBlock Text="Print setup" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+                <TextBlock Margin="0,6,0,12" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"
+                           Text="Layouts choose printer 1 or 2 in template.xml. Configure driver preferences once per slot (e.g. HiTi 4R on slot 1, 2-up strip on slot 2)."/>
+
+                <TextBlock Text="Preview sample" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" Margin="0,4,0,8"/>
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="AlignSampleCombo" Style="{StaticResource Style.DarkComboBox}" Height="34"
+                              SelectionChanged="OnAlignSampleChanged"/>
+                    <Button Grid.Column="1" Content="Browse…" Style="{StaticResource Style.GhostButton}" Margin="10,0,0,0"
+                            MinWidth="90" Padding="12,6" Click="OnBrowseAlignSampleClick"/>
+                    <ComboBox x:Name="PaperOrientationCombo" Grid.Column="2" Style="{StaticResource Style.DarkComboBox}"
+                              Height="34" Width="200" Margin="10,0,0,0"
+                              SelectionChanged="OnPaperOrientationChanged"
+                              ToolTip="Match this to your driver paper orientation (Configure printer…)."/>
+                </Grid>
+
+                <TabControl x:Name="PrinterTabs" Background="Transparent" BorderThickness="0" Padding="0"
+                            SelectionChanged="OnPrinterTabChanged">
+                    <TabControl.Resources>
+                        <Style TargetType="TabItem">
+                            <Setter Property="Foreground" Value="{StaticResource Brush.TextMuted}"/>
+                            <Setter Property="FontSize"  Value="14"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Padding" Value="16,10"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="TabItem">
+                                        <Border x:Name="Bd" Padding="{TemplateBinding Padding}"
+                                                BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="0,0,0,2"
+                                                Background="Transparent">
+                                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Brush.Accent}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Text}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Text}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </TabControl.Resources>
+
+                    <TabItem Header="Printer 1 (main)">
+                        <StackPanel Margin="0,16,0,0">
+                            <TextBlock Text="Windows print queue" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" Margin="0,0,0,8"/>
+                            <ComboBox x:Name="Printer1Combo" Style="{StaticResource Style.DarkComboBox}" Height="34"
+                                      SelectionChanged="OnPrinter1QueueChanged"/>
+
+                            <TextBlock Text="Mode label (optional)" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" Margin="0,14,0,8"/>
+                            <TextBox x:Name="Printer1ProfileText" Height="34" Padding="10,6" VerticalContentAlignment="Center"
+                                     Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                                     BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"
+                                     ToolTip="e.g. 4×6 4R — reminder for operators"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                <Button Content="Configure printer…" Style="{StaticResource Style.PrimaryButton}"
+                                        Padding="18,10" FontSize="14" Click="OnConfigurePrinter1Click"/>
+                                <Button Content="Clear preferences" Style="{StaticResource Style.GhostButton}"
+                                        Margin="12,0,0,0" Padding="16,10" FontSize="14" Click="OnClearPrinter1Click"/>
+                                <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="Copies" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Foreground="{StaticResource Brush.TextMuted}" FontSize="13"/>
+                                    <TextBox x:Name="Printer1CopiesText" Width="48" Height="34" Padding="8,6"
+                                             VerticalContentAlignment="Center"
+                                             Background="{StaticResource Brush.Card}"
+                                             Foreground="{StaticResource Brush.Text}"
+                                             BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Text="Printer alignment" FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Text}" Margin="0,20,0,4"/>
+                            <TextBlock FontSize="12" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap" Margin="0,0,0,10"
+                                       Text="100% = true size, centered (standard). Change scale/position only to fix drift. Save settings before leaving. Preview matches print math."/>
+
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="260"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="270"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Scale %" FontSize="12" Foreground="{StaticResource Brush.TextMuted}" Margin="0,0,0,4"/>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="52"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Slider x:Name="Printer1AlignScaleSlider" Minimum="50" Maximum="150" Value="100" VerticalAlignment="Center"/>
+                                        <TextBox x:Name="Printer1AlignScaleText" Grid.Column="1" Margin="8,0,0,0" Height="32"
+                                                 Padding="6,4" VerticalContentAlignment="Center"
+                                                 Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                                                 BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Horizontal (+ → right)" FontSize="12" Foreground="{StaticResource Brush.TextMuted}" Margin="0,0,0,4"/>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="52"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Slider x:Name="Printer1AlignHorizontalSlider" Minimum="-200" Maximum="200" Value="0" VerticalAlignment="Center"/>
+                                        <TextBox x:Name="Printer1AlignHorizontalText" Grid.Column="1" Margin="8,0,0,0" Height="32"
+                                                 Padding="6,4" VerticalContentAlignment="Center"
+                                                 Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                                                 BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Vertical (+ ↓ down)" FontSize="12" Foreground="{StaticResource Brush.TextMuted}" Margin="0,0,0,4"/>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="52"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Slider x:Name="Printer1AlignVerticalSlider" Minimum="-200" Maximum="200" Value="0" VerticalAlignment="Center"/>
+                                        <TextBox x:Name="Printer1AlignVerticalText" Grid.Column="1" Margin="8,0,0,0" Height="32"
+                                                 Padding="6,4" VerticalContentAlignment="Center"
+                                                 Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                                                 BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                                    </Grid>
+
+                                    <Button Content="Print test page" Style="{StaticResource Style.GhostButton}"
+                                            HorizontalAlignment="Left" Padding="16,8" Click="OnPrintTestPage1Click"/>
+                                </StackPanel>
+
+                                <controls:PrintAlignmentPreviewControl x:Name="Printer1AlignPreview" Grid.Column="2"/>
+                            </Grid>
+
+                            <TextBlock x:Name="Printer1PrefStatus" Margin="0,14,0,0" FontSize="13"
+                                       Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </TabItem>
+
+                    <TabItem Header="Printer 2 (secondary)">
+                        <StackPanel Margin="0,16,0,0">
+                            <TextBlock Text="Windows print queue" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" Margin="0,0,0,8"/>
+                            <ComboBox x:Name="Printer2Combo" Style="{StaticResource Style.DarkComboBox}" Height="34"
+                                      SelectionChanged="OnPrinter2QueueChanged"/>
+
+                            <TextBlock Text="Mode label (optional)" FontSize="13" Foreground="{StaticResource Brush.TextMuted}" Margin="0,14,0,8"/>
+                            <TextBox x:Name="Printer2ProfileText" Height="34" Padding="10,6" VerticalContentAlignment="Center"
+                                     Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                                     BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"
+                                     ToolTip="e.g. 2×6 strip 2-up — reminder for operators"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                <Button Content="Configure printer…" Style="{StaticResource Style.PrimaryButton}"
+                                        Padding="18,10" FontSize="14" Click="OnConfigurePrinter2Click"/>
+                                <Button Content="Clear preferences" Style="{StaticResource Style.GhostButton}"
+                                        Margin="12,0,0,0" Padding="16,10" FontSize="14" Click="OnClearPrinter2Click"/>
+                                <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="Copies" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Foreground="{StaticResource Brush.TextMuted}" FontSize="13"/>
+                                    <TextBox x:Name="Printer2CopiesText" Width="48" Height="34" Padding="8,6"
+                                             VerticalContentAlignment="Center"
+                                             Background="{StaticResource Brush.Card}"
+                                             Foreground="{StaticResource Brush.Text}"
+                                             BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <CheckBox x:Name="Printer2FollowPrinter1AlignCheck" Style="{StaticResource Style.DarkCheckBox}"
+                                      Margin="0,20,0,8" Content="Use Printer 1 alignment and scale"
+                                      Checked="OnPrinter2FollowPrinter1Changed" Unchecked="OnPrinter2FollowPrinter1Changed"
+                                      ToolTip="When enabled, Printer 2 ignores its own sliders and copies Printer 1 tuning."/>
+
+                            <StackPanel x:Name="Printer2AlignmentPanel">
+                                <TextBlock Text="Printer alignment" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{StaticResource Brush.Text}" Margin="0,0,0,4"/>
+                                <TextBlock FontSize="12" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap" Margin="0,0,0,10"
+                                           Text="100% = true size, centered. Tune separately for a second printer, or follow Printer 1 above."/>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MinWidth="260"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="270"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Scale %" FontSize="12" Foreground="{StaticResource Brush.TextMuted}" Margin="0,0,0,4"/>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="52"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="Printer2AlignScaleSlider" Minimum="50" Maximum="150" Value="100" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="Printer2AlignScaleText" Grid.Column="1" Margin="8,0,0,0" Height="32"
+                                                     Padding="6,4" VerticalContentAlignment="Center"
+                                                     Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                                                     BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                                        </Grid>
+
+                                        <TextBlock Text="Horizontal (+ → right)" FontSize="12" Foreground="{StaticResource Brush.TextMuted}" Margin="0,0,0,4"/>
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="52"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="Printer2AlignHorizontalSlider" Minimum="-200" Maximum="200" Value="0" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="Printer2AlignHorizontalText" Grid.Column="1" Margin="8,0,0,0" Height="32"
+                                                     Padding="6,4" VerticalContentAlignment="Center"
+                                                     Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                                                     BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                                        </Grid>
+
+                                        <TextBlock Text="Vertical (+ ↓ down)" FontSize="12" Foreground="{StaticResource Brush.TextMuted}" Margin="0,0,0,4"/>
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="52"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="Printer2AlignVerticalSlider" Minimum="-200" Maximum="200" Value="0" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="Printer2AlignVerticalText" Grid.Column="1" Margin="8,0,0,0" Height="32"
+                                                     Padding="6,4" VerticalContentAlignment="Center"
+                                                     Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                                                     BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                                        </Grid>
+
+                                        <Button Content="Print test page" Style="{StaticResource Style.GhostButton}"
+                                                HorizontalAlignment="Left" Padding="16,8" Click="OnPrintTestPage2Click"/>
+                                    </StackPanel>
+
+                                    <controls:PrintAlignmentPreviewControl x:Name="Printer2AlignPreview" Grid.Column="2"/>
+                                </Grid>
+                            </StackPanel>
+
+                            <TextBlock x:Name="Printer2PrefStatus" Margin="0,14,0,0" FontSize="13"
+                                       Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </TabItem>
+                </TabControl>
+
+                <Border Height="1" Background="{StaticResource Brush.Stroke}" Margin="0,24,0,16"/>
+                <TextBlock Text="Print behavior" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
+                <CheckBox x:Name="PrintAutoCheck" Style="{StaticResource Style.DarkCheckBox}"
+                          Content="Print automatically after each session"/>
+                <CheckBox x:Name="ShowPrintButtonCheck" Style="{StaticResource Style.DarkCheckBox}"
+                          Content="Show print button on final screen"/>
+                <CheckBox x:Name="PrintBothCheck" Style="{StaticResource Style.DarkCheckBox}"
+                          Content="Print to both printers (layout slot + other slot)"/>
+                <CheckBox x:Name="LimitPrintsCheck" Style="{StaticResource Style.DarkCheckBox}"
+                          Content="Limit prints" Checked="OnLimitPrintsCheckChanged" Unchecked="OnLimitPrintsCheckChanged"/>
+                <TextBlock Margin="20,0,0,8" FontSize="12" Foreground="{StaticResource Brush.TextMuted}" TextWrapping="Wrap"
+                           Text="Per event = total print actions for the whole event (hides Print when reached). Per session = print actions per guest session (saved; session preview respects it). Guest print max = physical copies per single Print click."/>
+
+                <Grid x:Name="LimitPrintsPanel" Margin="20,4,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Per event" VerticalAlignment="Center" Foreground="{StaticResource Brush.TextMuted}" FontSize="13" Margin="0,0,8,0"
+                               ToolTip="Total print actions allowed for this event across all guests"/>
+                    <TextBox x:Name="MaxPrintsEventText" Grid.Column="1" Height="32" Padding="8,4" VerticalContentAlignment="Center"
+                             Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                             BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                    <TextBlock Grid.Column="2" Text="Per session" VerticalAlignment="Center" Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="13" Margin="16,0,8,0"
+                               ToolTip="Print actions per session (final screen + session preview share this count)"/>
+                    <TextBox x:Name="MaxPrintsSessionText" Grid.Column="3" Height="32" Padding="8,4" VerticalContentAlignment="Center"
+                             Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                             BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"/>
+                </Grid>
+
+                <Grid Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="140"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Print window max" VerticalAlignment="Center" Foreground="{StaticResource Brush.TextMuted}" FontSize="13" Margin="0,0,8,0"
+                               ToolTip="Max physical copies sent in one Print click (each click uses one session print action)"/>
+                    <TextBox x:Name="PrintDialogMaxText" Grid.Column="1" Height="32" Padding="8,4" VerticalContentAlignment="Center"
+                             Background="{StaticResource Brush.Card}" Foreground="{StaticResource Brush.Text}"
+                             BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1"
+                             ToolTip="Maximum copies per guest print action (future copy picker)"/>
+                    <TextBlock Grid.Column="2" Text="Sharpening" VerticalAlignment="Center" Foreground="{StaticResource Brush.TextMuted}"
+                               FontSize="13" Margin="16,0,8,0"/>
+                    <ComboBox x:Name="SharpeningCombo" Grid.Column="3" Style="{StaticResource Style.DarkComboBox}" Height="32"/>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
             <Button Content="Cancel" Style="{StaticResource Style.GhostButton}" MinWidth="100" Margin="0,0,12,0"

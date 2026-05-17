@@ -39,6 +39,41 @@ public static class LayoutCatalogService
         }
     }
 
+    /// <summary>Imported packs whose folder and template.xml still exist on disk.</summary>
+    public static List<LayoutCatalogEntry> LoadAvailableCatalogEntries() =>
+        LoadCatalogEntries().Where(IsCatalogEntryAvailable).ToList();
+
+    /// <summary>True when the catalog extract folder exists and contains template.xml.</summary>
+    public static bool IsCatalogEntryAvailable(LayoutCatalogEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Folder)) return false;
+        var rootDir = Path.Combine(LessRealBoothPaths.CatalogLayoutsStore, entry.Folder);
+        if (!Directory.Exists(rootDir)) return false;
+        return LayoutPackService.FindTemplateXmlPath(rootDir) != null;
+    }
+
+    /// <summary>Removes catalog JSON rows whose files were deleted. Returns how many were removed.</summary>
+    public static int PruneMissingFromCatalog()
+    {
+        var all = LoadCatalogEntries();
+        var kept = all.Where(IsCatalogEntryAvailable).ToList();
+        var removed = all.Count - kept.Count;
+        if (removed > 0)
+            SaveCatalogEntries(kept);
+        return removed;
+    }
+
+    /// <summary>All layout ids that can be used right now (built-ins + available imports).</summary>
+    public static HashSet<string> CollectAvailableLayoutIds()
+    {
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lo in BuiltInLayouts.All())
+            ids.Add(lo.Id);
+        foreach (var e in LoadAvailableCatalogEntries())
+            ids.Add(e.Id);
+        return ids;
+    }
+
     private static void SaveCatalogEntries(List<LayoutCatalogEntry> layouts)
     {
         EnsureCatalogDirectories();
@@ -49,7 +84,7 @@ public static class LayoutCatalogService
     /// <summary>Maps catalog rows to booth layout options (preview path set when preview.png exists).</summary>
     public static IEnumerable<BoothLayoutOption> ToBoothOptions(IEnumerable<LayoutCatalogEntry> entries)
     {
-        foreach (var e in entries)
+        foreach (var e in entries.Where(IsCatalogEntryAvailable))
         {
             var rootDir = Path.Combine(LessRealBoothPaths.CatalogLayoutsStore, e.Folder);
             var preview = LayoutPreviewResolver.FindPreviewPngUnderDirectory(rootDir);

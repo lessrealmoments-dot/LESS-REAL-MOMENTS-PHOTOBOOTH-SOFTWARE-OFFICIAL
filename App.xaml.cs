@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Threading;
 using BoothDesktop.Services;
 
@@ -32,13 +32,19 @@ public partial class App : Application
             return;
         }
 
+        SessionEnding += (_, _) =>
+        {
+            RuntimeLog.Info("App", "Windows session ending — stopping Sony bridge");
+            SonyBridgeLauncher.ShutdownAllForAppExit();
+        };
+
         base.OnStartup(e);
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         RuntimeLog.Info("App", $"BoothDesktop exit code={e.ApplicationExitCode}");
-        SonyBridgeLauncher.StopIfWeStartedIt();
+        SonyBridgeLauncher.ShutdownAllForAppExit();
         try
         {
             _singleInstanceMutex?.ReleaseMutex();

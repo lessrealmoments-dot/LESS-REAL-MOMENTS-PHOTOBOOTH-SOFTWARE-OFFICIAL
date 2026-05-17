@@ -83,6 +83,10 @@ public sealed record BridgeDiagnosticsSnapshot(
     string LiveLine,
     string ShmLine)
 {
+    /// <summary>Bridge /health reports camera connected and ready for capture.</summary>
+    public bool IsReadyForCapture =>
+        HealthLine.Contains("connected=true", StringComparison.OrdinalIgnoreCase);
+
     public string ToDisplayText() =>
         $"{BridgeProcessLine}\n{HealthLine}\n{LiveLine}\n{ShmLine}";
 }

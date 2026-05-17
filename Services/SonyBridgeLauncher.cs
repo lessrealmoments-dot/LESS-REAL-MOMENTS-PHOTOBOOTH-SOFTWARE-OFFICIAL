@@ -7,8 +7,8 @@ using System.Windows;
 namespace BoothDesktop.Services;
 
 /// <summary>
-/// Starts native-poc sony_bridge.exe when BoothDesktop opens, if nothing is already serving /health.
-/// Shuts down that process on app exit only if we started it.
+/// Starts sony_bridge.exe for BoothDesktop and tears it down on app exit (graceful /shutdown, then force kill all).
+/// Child bridge processes are tied to BoothDesktop via a Windows job object when possible.
 /// </summary>
 public static class SonyBridgeLauncher
 {
@@ -18,8 +18,11 @@ public static class SonyBridgeLauncher
     private static bool _warnedMissing;
     private static DateTime _lastStartAttemptUtc;
     private static bool _startupBridgeResetDone;
+    private static int _appExitCleanupStarted;
 
-    private const string HealthUrl = "http://127.0.0.1:18080/health";
+    private const string BridgeBaseUrl = "http://127.0.0.1:18080";
+    private const string HealthUrl = BridgeBaseUrl + "/health";
+    private const string ShutdownUrl = BridgeBaseUrl + "/shutdown";
 
     public static async Task EnsureStartedAsync()
     {
@@ -30,13 +33,12 @@ public static class SonyBridgeLauncher
             _lastStartAttemptUtc = DateTime.UtcNow;
         }
 
-        // Strict startup guard: always clear stale bridge instances once per Booth launch.
-        // This prevents SDK/device conflicts where an old hidden sony_bridge keeps camera ownership.
         if (!_startupBridgeResetDone)
         {
-            TryStopAllBridgeProcesses();
+            RuntimeLog.Info("Bridge", "startup: clearing stale sony_bridge processes");
+            ForceStopAllBridgeProcesses();
             _startupBridgeResetDone = true;
-            await Task.Delay(500).ConfigureAwait(false);
+            await Task.Delay(1500).ConfigureAwait(false);
         }
 
         if (await IsHealthyAsync().ConfigureAwait(false))
@@ -62,8 +64,8 @@ public static class SonyBridgeLauncher
             return;
         }
 
-        // Recovery path on repeated calls: if endpoint is still down, clear leftovers again before relaunch.
-        TryStopAllBridgeProcesses();
+        RuntimeLog.Info("Bridge", "recovery: clearing bridges before relaunch");
+        ForceStopAllBridgeProcesses();
 
         var workDir = Path.GetDirectoryName(exe)!;
         try
@@ -77,10 +79,25 @@ public static class SonyBridgeLauncher
             };
             var p = Process.Start(psi);
             if (p == null) return;
+
+            p.EnableRaisingEvents = true;
+            p.Exited += (_, _) =>
+            {
+                lock (Gate)
+                {
+                    if (ReferenceEquals(_ownedProcess, p))
+                        _ownedProcess = null;
+                }
+            };
+
+            BridgeParentJob.TryAssign(p);
+
             lock (Gate)
             {
                 _ownedProcess = p;
             }
+
+            RuntimeLog.Info("Bridge", $"started pid={p.Id} path={exe}");
         }
         catch (Exception ex)
         {
@@ -107,7 +124,22 @@ public static class SonyBridgeLauncher
             MessageBoxImage.Warning);
     }
 
-    /// <summary>For Phase A diagnostics strip on capture screen.</summary>
+    /// <summary>
+    /// Call when BoothDesktop is closing (X, Alt+F4, Exit, logoff). Safe to call more than once.
+    /// </summary>
+    public static void ShutdownAllForAppExit()
+    {
+        if (Interlocked.Exchange(ref _appExitCleanupStarted, 1) != 0)
+            return;
+
+        RuntimeLog.Info("Bridge", "app exit: shutting down all sony_bridge processes");
+        TryGracefulShutdown();
+        ForceStopAllBridgeProcesses();
+    }
+
+    /// <summary>Obsolete name — forwards to <see cref="ShutdownAllForAppExit"/>.</summary>
+    public static void StopIfWeStartedIt() => ShutdownAllForAppExit();
+
     public static string DescribeOwnedProcessStatus()
     {
         lock (Gate)
@@ -119,7 +151,7 @@ public static class SonyBridgeLauncher
                 _ownedProcess.Refresh();
                 if (_ownedProcess.HasExited)
                     return $"Bridge process: exited (code {_ownedProcess.ExitCode}) — HTTP will be down";
-                return "Bridge process: running (started by Booth)";
+                return $"Bridge process: running (pid {_ownedProcess.Id}, started by Booth)";
             }
             catch
             {
@@ -128,37 +160,29 @@ public static class SonyBridgeLauncher
         }
     }
 
-    public static void StopIfWeStartedIt()
+    private static void TryGracefulShutdown()
     {
-        Process? p;
-        lock (Gate)
-        {
-            p = _ownedProcess;
-            _ownedProcess = null;
-        }
-
-        if (p == null || p.HasExited) return;
         try
         {
-            p.Kill(entireProcessTree: true);
-            p.WaitForExit(5000);
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            using var response = client.PostAsync(ShutdownUrl, null).GetAwaiter().GetResult();
+            RuntimeLog.Info("Bridge",
+                $"graceful /shutdown status={(int)response.StatusCode} (old bridge without /shutdown is OK)");
+            Thread.Sleep(900);
         }
-        catch
+        catch (Exception ex)
         {
-            /* ignore */
-        }
-        finally
-        {
-            p.Dispose();
+            RuntimeLog.Info("Bridge", $"graceful /shutdown skipped: {ex.Message}");
         }
     }
 
-    /// <summary>
-    /// Kills every sony_bridge.exe (all copies). Uses taskkill first so orphaned / multi-instance
-    /// bridges from prior runs or different folders are cleared reliably; then .NET Kill as backup.
-    /// </summary>
-    private static void TryStopAllBridgeProcesses()
+    private static void ForceStopAllBridgeProcesses()
     {
+        lock (Gate)
+        {
+            _ownedProcess = null;
+        }
+
         TryTaskKillAllSonyBridgeExe();
         Thread.Sleep(1200);
 
@@ -176,39 +200,17 @@ public static class SonyBridgeLauncher
                 }
                 catch
                 {
-                    /* ignore one process and continue */
+                    /* ignore one process */
                 }
                 finally
                 {
                     try { p.Dispose(); } catch { /* ignore */ }
                 }
             }
-
-            lock (Gate)
-            {
-                if (_ownedProcess != null)
-                {
-                    try
-                    {
-                        _ownedProcess.Refresh();
-                        if (!_ownedProcess.HasExited)
-                            _ownedProcess.Kill(entireProcessTree: true);
-                    }
-                    catch
-                    {
-                        /* ignore */
-                    }
-                    finally
-                    {
-                        try { _ownedProcess.Dispose(); } catch { /* ignore */ }
-                        _ownedProcess = null;
-                    }
-                }
-            }
         }
-        catch
+        catch (Exception ex)
         {
-            /* ignore stale cleanup failures */
+            RuntimeLog.Warn("Bridge", $"ForceStopAllBridgeProcesses: {ex.Message}");
         }
     }
 
@@ -228,7 +230,7 @@ public static class SonyBridgeLauncher
         }
         catch
         {
-            /* ignore — non-Windows or taskkill missing */
+            /* ignore */
         }
     }
 
@@ -245,12 +247,9 @@ public static class SonyBridgeLauncher
         }
     }
 
-    /// <summary>Search common locations relative to BoothDesktop and repo layout.</summary>
     public static string? FindSonyBridgeExecutable()
     {
         var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        // Prefer native-poc Release output (Cr_Core.dll lives there). Do NOT prefer a lone sony_bridge.exe
-        // next to BoothDesktop.exe — Windows will start it but fail with "Cr_Core.dll was not found".
         var candidates = new List<string>();
         foreach (var rel in NativeBridgeRelativeTries)
             candidates.Add(Path.GetFullPath(Path.Combine(baseDir, rel)));
@@ -266,7 +265,6 @@ public static class SonyBridgeLauncher
         return null;
     }
 
-    /// <summary>Various depths from bin/Release/net8.0-windows, _build_verify_out, etc.</summary>
     private static readonly string[] NativeBridgeRelativeTries =
     [
         Path.Combine("..", "..", "..", "..", "native-poc", "build", "Release", "sony_bridge.exe"),

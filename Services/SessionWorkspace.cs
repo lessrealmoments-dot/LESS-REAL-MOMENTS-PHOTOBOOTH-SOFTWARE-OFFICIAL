@@ -186,6 +186,7 @@ public sealed class SessionWorkspace
                         string.Equals(Path.GetFileNameWithoutExtension(r.Replace('/', Path.DirectorySeparatorChar)),
                             shotStem, StringComparison.OrdinalIgnoreCase));
                     _manifest.EventOriginalRelativePaths.Add(eventOrigRel);
+                    _manifest.Captures.RemoveAll(c => c.Index == shotNumberOneBased);
                     _manifest.Captures.Add(new CaptureEntry
                     {
                         Index = shotNumberOneBased,
@@ -270,8 +271,11 @@ public sealed class SessionWorkspace
         }
 
         var outAbs = Path.Combine(SessionRoot, "final", "composite.png");
-        if (!TemplateCompositor.TryComposeToPng(parsed, packRoot, shots, outAbs, out var cerr))
-            return (false, null, cerr);
+        var preferVips = GlobalSettingsService.Load().PrintBehavior?.UseVipsCompositor ?? false;
+        var (ok, engine, cerr) = Compositors.TryCompose(preferVips, parsed, packRoot, shots, outAbs);
+        if (!ok) return (false, null, cerr);
+        RuntimeLog.Info("Composite",
+            $"engine={engine} session={_sessionId} output={outAbs}");
 
         var printRel = Path.Combine("prints", $"{_sessionId}.png").Replace('\\', '/');
         try
@@ -373,6 +377,8 @@ public sealed class SessionManifest
     public string? ShareGalleryToken { get; set; }
     /// <summary>Base URL for the sharing station without trailing slash; QR encodes base + token.</summary>
     public string? ShareGalleryBaseUrl { get; set; }
+    /// <summary>Number of print button actions used for this session (persisted).</summary>
+    public int PrintActionsUsed { get; set; }
 }
 
 public sealed class CaptureEntry

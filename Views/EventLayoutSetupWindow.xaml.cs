@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -23,8 +24,15 @@ public partial class EventLayoutSetupWindow : Window
 
     private void PopulateRows()
     {
+        var pruned = LayoutCatalogService.PruneMissingFromCatalog();
+        if (pruned > 0)
+            RuntimeLog.Info("Layouts", $"removed {pruned} missing import(s) from catalog");
+
+        var availableIds = LayoutCatalogService.CollectAvailableLayoutIds();
+        var allowed = SanitizeEnabledLayoutIds(_event.EnabledLayoutIds, availableIds);
+        PersistSanitizedAllowlistIfNeeded(allowed);
+
         var rows = new ObservableCollection<LayoutCheckRow>();
-        var allowed = _event.EnabledLayoutIds;
         var useAllDefault = allowed == null || allowed.Count == 0;
 
         foreach (var lo in BuiltInLayouts.All())
@@ -32,23 +40,60 @@ public partial class EventLayoutSetupWindow : Window
             rows.Add(new LayoutCheckRow
             {
                 LayoutId = lo.Id,
-                Label = $"{lo.DisplayName}  (built-in · {lo.Id})",
+                DisplayName = lo.DisplayName,
+                PreviewPath = lo.ResolvedPreviewPath,
                 IsChecked = useAllDefault || allowed!.Contains(lo.Id, StringComparer.OrdinalIgnoreCase)
             });
         }
 
-        foreach (var lo in LayoutCatalogService.ToBoothOptions(LayoutCatalogService.LoadCatalogEntries()))
+        foreach (var lo in LayoutCatalogService.ToBoothOptions(LayoutCatalogService.LoadAvailableCatalogEntries()))
         {
-            var idNote = lo.Id.Length > 10 ? $"{lo.Id[..8]}…" : lo.Id;
             rows.Add(new LayoutCheckRow
             {
                 LayoutId = lo.Id,
-                Label = $"{lo.DisplayName}  (imported · {idNote})",
+                DisplayName = lo.DisplayName,
+                PreviewPath = lo.ResolvedPreviewPath,
                 IsChecked = useAllDefault || allowed!.Contains(lo.Id, StringComparer.OrdinalIgnoreCase)
             });
         }
 
         LayoutChecksList.ItemsSource = rows;
+
+        if (rows.Count == 0)
+        {
+            MessageBox.Show(this,
+                "No layouts are available. Import a layout ZIP from the Events screen, or add preview packs under Assets\\Layouts.",
+                "Layouts", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    private void PersistSanitizedAllowlistIfNeeded(List<string>? cleaned)
+    {
+        var orig = _event.EnabledLayoutIds;
+        if (orig == null || orig.Count == 0)
+            return;
+
+        var same = cleaned != null && cleaned.Count == orig.Count
+            && cleaned.All(id => orig.Contains(id, StringComparer.OrdinalIgnoreCase));
+        if (same)
+            return;
+
+        EventRegistryService.TrySetEnabledLayouts(_event.Id, cleaned);
+    }
+
+    /// <summary>Drop ids that point at deleted imports.</summary>
+    private static List<string>? SanitizeEnabledLayoutIds(IReadOnlyList<string>? enabled, HashSet<string> availableIds)
+    {
+        if (enabled == null || enabled.Count == 0)
+            return null;
+
+        var cleaned = enabled.Where(id => availableIds.Contains(id)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (cleaned.Count == enabled.Count)
+            return cleaned;
+
+        RuntimeLog.Info("Layouts",
+            $"event allowlist: removed {enabled.Count - cleaned.Count} missing layout id(s)");
+        return cleaned.Count == 0 ? null : cleaned;
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
@@ -84,7 +129,11 @@ public partial class EventLayoutSetupWindow : Window
         private bool _isChecked;
 
         public required string LayoutId { get; init; }
-        public required string Label { get; init; }
+        public required string DisplayName { get; init; }
+        public string? PreviewPath { get; init; }
+
+        public bool HasPreview =>
+            !string.IsNullOrWhiteSpace(PreviewPath) && File.Exists(PreviewPath);
 
         public bool IsChecked
         {

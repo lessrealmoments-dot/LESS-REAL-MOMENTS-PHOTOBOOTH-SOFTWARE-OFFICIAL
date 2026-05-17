@@ -89,6 +89,14 @@ public static class EventRegistryService
     {
         if (string.IsNullOrWhiteSpace(eventId) || layoutIds == null || layoutIds.Count == 0)
             return false;
+        return TrySetEnabledLayouts(eventId, layoutIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    /// <summary>null or empty list = all available layouts visible for the event.</summary>
+    public static bool TrySetEnabledLayouts(string eventId, List<string>? layoutIds)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+            return false;
 
         try
         {
@@ -100,7 +108,9 @@ public static class EventRegistryService
             if (ev == null)
                 return false;
 
-            ev.EnabledLayoutIds = layoutIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            ev.EnabledLayoutIds = layoutIds is { Count: > 0 }
+                ? layoutIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                : null;
             File.WriteAllText(path, JsonSerializer.Serialize(file, JsonOpts));
             return true;
         }

@@ -19,12 +19,20 @@ public sealed class TemplateLayer
     public double Y { get; init; }
     public double W { get; init; }
     public double H { get; init; }
+    /// <summary>When false, dslrBooth stretches the photo to the slot rect (no letterbox).</summary>
+    public bool KeepAspect { get; init; } = true;
+    /// <summary>Designer-only layer in dslrBooth exports; must not be drawn on final composite.</summary>
+    public bool IsLocked { get; init; }
 }
 
 public sealed class ParsedTemplate
 {
     public required int CanvasWidth { get; init; }
     public required int CanvasHeight { get; init; }
+    /// <summary>1 or 2 — maps to global Printer 1 / Printer 2 settings.</summary>
+    public int PrinterSlot { get; init; } = 1;
+    /// <summary>Export DPI from template.xml (dslrBooth default 300).</summary>
+    public int ResolutionDpi { get; init; } = 300;
     public required string TemplateFilePath { get; init; }
     public required IReadOnlyList<TemplateLayer> Layers { get; init; }
 }
@@ -72,10 +80,17 @@ public static class DslrTemplateParser
                 return false;
             }
 
+            var printerSlot = TemplatePrintRouting.ReadPrinterSlot(root);
+            var resolutionDpi = 300;
+            if (TryGetInt(root, out var res, "Resolution", "Dpi", "DPI", "PrintResolution"))
+                resolutionDpi = Math.Clamp(res, 72, 600);
+
             parsed = new ParsedTemplate
             {
                 CanvasWidth = cw,
                 CanvasHeight = ch,
+                PrinterSlot = printerSlot,
+                ResolutionDpi = resolutionDpi,
                 TemplateFilePath = templateXmlPath,
                 Layers = layers
             };
@@ -131,7 +146,9 @@ public static class DslrTemplateParser
                 X = x,
                 Y = y,
                 W = w,
-                H = h
+                H = h,
+                KeepAspect = ReadKeepAspect(el),
+                IsLocked = ReadIsLocked(el)
             };
             return true;
         }
@@ -161,13 +178,26 @@ public static class DslrTemplateParser
                 X = x,
                 Y = y,
                 W = w,
-                H = h
+                H = h,
+                KeepAspect = ReadKeepAspect(el),
+                IsLocked = ReadIsLocked(el)
             };
             return true;
         }
 
         layer = null!;
         return false;
+    }
+
+    private static bool ReadIsLocked(XmlElement el)
+    {
+        var s = GetAttr(el, "IsLocked", "Locked");
+        if (string.IsNullOrWhiteSpace(s)) return false;
+        s = s.Trim();
+        return bool.TryParse(s, out var b) && b
+               || string.Equals(s, "1", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(s, "yes", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(s, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsStaticImageElement(string localName) =>
@@ -181,6 +211,17 @@ public static class DslrTemplateParser
     {
         if (TryGetDouble(el, out var z, "ZIndex", "Z", "Layer", "Order")) return (int)Math.Round(z);
         return fallback;
+    }
+
+    private static bool ReadKeepAspect(XmlElement el)
+    {
+        var s = GetAttr(el, "KeepAspect", "KeepAspectRatio", "PreserveAspect");
+        if (string.IsNullOrWhiteSpace(s)) return true;
+        s = s.Trim();
+        if (bool.TryParse(s, out var b)) return b;
+        if (string.Equals(s, "0", StringComparison.OrdinalIgnoreCase)) return false;
+        if (string.Equals(s, "1", StringComparison.OrdinalIgnoreCase)) return true;
+        return true;
     }
 
     private static string? GetImageRelativePath(XmlElement el, string packRoot)

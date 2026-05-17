@@ -44,6 +44,14 @@ public partial class PhotoboothFlowView : UserControl
     private const int FirstShotCountdownSeconds = 8;
     private const int NextShotCountdownSeconds = 5;
     private const int CaptureLeadSeconds = 3;
+    private const double ShotReviewSeconds = 3;
+    private DispatcherTimer? _shotReviewTimer;
+    private int _pendingReviewShotNumber;
+    private bool _shotReviewShowing;
+    private ParsedTemplate? _parsedLayoutTemplate;
+    private EventSessionItem? _viewingSession;
+    private DateTime _guestPrintCooldownUntilUtc = DateTime.MinValue;
+    private DispatcherTimer? _guestPrintCooldownTimer;
 
     public PhotoboothFlowView(BoothEventSummary boothEvent, INavigationHost nav)
     {
@@ -52,6 +60,7 @@ public partial class PhotoboothFlowView : UserControl
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += (_, _) => TearDownCaptureFlow(clearSession: true);
+        LivePreviewFrame.SizeChanged += (_, _) => LiveSlotGuide.InvalidateVisual();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -67,7 +76,7 @@ public partial class PhotoboothFlowView : UserControl
     private void LoadAllLayouts()
     {
         var layouts = new ObservableCollection<BoothLayoutOption>();
-        foreach (var opt in LayoutCatalogService.ToBoothOptions(LayoutCatalogService.LoadCatalogEntries()))
+        foreach (var opt in LayoutCatalogService.ToBoothOptions(LayoutCatalogService.LoadAvailableCatalogEntries()))
         {
             if (_event.IsLayoutVisible(opt.Id))
                 layouts.Add(opt);
@@ -86,6 +95,10 @@ public partial class PhotoboothFlowView : UserControl
     /// <summary>Stops timers, cancels in-flight HTTP to the bridge, clears flow token.</summary>
     private void TearDownCaptureFlow(bool clearSession)
     {
+        _guestPrintCooldownTimer?.Stop();
+        _guestPrintCooldownTimer = null;
+        _guestPrintCooldownUntilUtc = DateTime.MinValue;
+
         _flowCts?.Cancel();
         _ = SetPrefocusAsync(false, CancellationToken.None);
         _stepTimer?.Stop();
@@ -95,12 +108,17 @@ public partial class PhotoboothFlowView : UserControl
         StopLivePolling();
         StopDiagnosticsTimer();
         StopPreRollPlayback();
+        StopShotReview();
         Interlocked.Exchange(ref _captureBusy, 0);
         if (clearSession)
         {
             _session = null;
             _workspace = null;
+            _parsedLayoutTemplate = null;
         }
+
+        LiveSlotGuide.ClearGuide();
+        LiveSlotGuide.Visibility = Visibility.Collapsed;
     }
 
     private void ShowPanel(UIElement visible)
@@ -278,10 +296,143 @@ public partial class PhotoboothFlowView : UserControl
         LivePreviewImage.Source = src;
         LivePreviewHint.Visibility = Visibility.Collapsed;
         LiveBridgeStatus.Text = bridgeStatusLine;
+        UpdateLiveSlotGuide();
         return true;
     }
 
     private void OnOpeningTap(object sender, RoutedEventArgs e) => ShowPanel(PanelLayoutPick);
+
+    private void OnViewSessionsClick(object sender, RoutedEventArgs e)
+    {
+        _ = NavigateToSessionsAsync();
+    }
+
+    private void OnSessionsBackClick(object sender, RoutedEventArgs e) => ShowPanel(PanelOpening);
+
+    private void OnSessionDetailBackClick(object sender, RoutedEventArgs e)
+    {
+        _viewingSession = null;
+        ShowPanel(PanelSessions);
+    }
+
+    private void OnSessionDetailPrintClick(object sender, RoutedEventArgs e)
+    {
+        if (_viewingSession == null) return;
+        TryGuestPrint(() =>
+        {
+            if (!SessionPrintService.TryPrintSession(_event.Id, _event.Name, _viewingSession.SessionFolderAbs,
+                    out var message))
+            {
+                MessageBox.Show(message, "Print", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            SyncActiveSessionPrintCountsIfSameFolder(_viewingSession.SessionFolderAbs);
+            ApplySessionDetailPrintUi();
+        });
+    }
+
+    private void OnSessionCardClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: SessionCardVm vm }) return;
+        _ = NavigateToSessionDetailAsync(vm.Item);
+    }
+
+    private async Task NavigateToSessionsAsync()
+    {
+        ShowPanel(PanelSessions);
+        SessionsGrid.ItemsSource = null;
+
+        var sessions = EventSessionCatalogService.LoadSessions(_event);
+        var cards = await Task.Run(() =>
+            sessions.Select(BuildSessionCardVm).ToList()).ConfigureAwait(true);
+
+        SessionsGrid.ItemsSource = new ObservableCollection<SessionCardVm>(cards);
+    }
+
+    private async Task NavigateToSessionDetailAsync(EventSessionItem item)
+    {
+        _viewingSession = item;
+        ShowPanel(PanelSessionDetail);
+        SessionDetailOverlay.Source = null;
+        SessionDetailGif.Source = null;
+        SessionDetailRaws.ItemsSource = null;
+
+        var thumbs = await Task.Run(() => BuildSessionDetailThumbs(item)).ConfigureAwait(true);
+
+        SessionDetailOverlay.Source = LoadThumbBitmap(thumbs.OverlayThumbAbs);
+        SessionDetailGif.Source = LoadThumbBitmap(thumbs.GifThumbAbs);
+        SessionDetailGif.Visibility = SessionDetailGif.Source != null ? Visibility.Visible : Visibility.Collapsed;
+        SessionDetailRaws.ItemsSource = thumbs.RawThumbAbsPaths.Count > 0
+            ? new ObservableCollection<string>(thumbs.RawThumbAbsPaths)
+            : null;
+
+        ApplySessionDetailPrintUi();
+    }
+
+    private void ApplySessionDetailPrintUi()
+    {
+        if (_viewingSession == null) return;
+
+        var quota = SessionPrintService.Evaluate(_event.Id, _event.Name, _viewingSession.SessionFolderAbs);
+        var blocked = quota.LimitsEnabled && !quota.CanPrint;
+        SessionDetailPrintButton.Visibility = blocked ? Visibility.Collapsed : Visibility.Visible;
+        SessionDetailPrintLimitText.Text = quota.UserMessage;
+        SessionDetailPrintLimitText.Visibility = blocked ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static SessionCardVm BuildSessionCardVm(EventSessionItem item)
+    {
+        var thumb = SessionThumbnailService.EnsureCompositeGridThumb(item.SessionFolderAbs, item.CompositeAbs);
+        return new SessionCardVm(item, thumb);
+    }
+
+    private static SessionDetailThumbs BuildSessionDetailThumbs(EventSessionItem item)
+    {
+        var detail = EventSessionCatalogService.LoadDetail(item);
+        var folder = item.SessionFolderAbs;
+        var overlay = SessionThumbnailService.EnsureCompositeDetailThumb(folder, detail.CompositeAbs);
+        var gif = SessionThumbnailService.EnsureGifPreviewThumb(folder, detail.OriginalAbsPaths);
+        var raws = detail.OriginalAbsPaths
+            .Select(p => SessionThumbnailService.EnsureRawThumb(folder, p))
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Cast<string>()
+            .ToList();
+        return new SessionDetailThumbs(overlay, gif, raws);
+    }
+
+    private static BitmapImage? LoadThumbBitmap(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.DecodePixelWidth = SessionThumbnailService.DetailOverlayMax;
+            bmp.UriSource = new Uri(path, UriKind.Absolute);
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private sealed record SessionDetailThumbs(string? OverlayThumbAbs, string? GifThumbAbs, IReadOnlyList<string> RawThumbAbsPaths);
+
+    private sealed class SessionCardVm
+    {
+        public EventSessionItem Item { get; }
+        public string? PreviewThumbAbs { get; }
+        public SessionCardVm(EventSessionItem item, string? previewThumbAbs)
+        {
+            Item = item;
+            PreviewThumbAbs = previewThumbAbs;
+        }
+    }
 
     private void OnLayoutCardClick(object sender, RoutedEventArgs e)
     {
@@ -291,12 +442,9 @@ public partial class PhotoboothFlowView : UserControl
 
         _flowCts = new CancellationTokenSource();
 
-        var limits = new SessionLimitConfig
-        {
-            MaxPhotosPerSession = 8,
-            MaxPrintsPerEvent = 200,
-            MaxPrintsPerSession = 2
-        };
+        var printBehavior = GlobalSettingsService.Load().PrintBehavior;
+        var limits = BuildSessionLimits(printBehavior);
+        var eventPrints = EventPrintCounterService.LoadTotalPrints(_event.Id, _event.Name);
 
         _session = new ActiveSessionState
         {
@@ -305,15 +453,56 @@ public partial class PhotoboothFlowView : UserControl
             Limits = limits,
             PhotosTaken = 0,
             PrintsThisSession = 0,
-            PrintsTotalEvent = 12 // mock: already used some event quota
+            PrintsTotalEvent = eventPrints
         };
 
         _workspace = new SessionWorkspace(_event.Id, _event.Name, layout.Id);
+
+        _parsedLayoutTemplate = null;
+        if (LayoutSlotGuideService.TryLoadTemplateForLayout(layout.Id, out var parsed, out var guideErr))
+        {
+            _parsedLayoutTemplate = parsed;
+            RuntimeLog.Info("Flow",
+                $"slot guide: template {_parsedLayoutTemplate.CanvasWidth}x{_parsedLayoutTemplate.CanvasHeight} layout={layout.Id}");
+        }
+        else
+            RuntimeLog.Warn("Flow", $"slot guide unavailable layout={layout.Id} err={guideErr}");
 
         BuildShotDots();
         UpdateLimitsLine();
         ShowPanel(PanelCapture);
         StartCurrentShot();
+    }
+
+    private void UpdateLiveSlotGuide()
+    {
+        if (_parsedLayoutTemplate == null || _session == null || _shotReviewShowing
+            || IntroOverlay.Visibility == Visibility.Visible
+            || PreRollOverlay.Visibility == Visibility.Visible
+            || PanelCapture.Visibility != Visibility.Visible)
+        {
+            LiveSlotGuide.ClearGuide();
+            LiveSlotGuide.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var photoIndex = _session.PhotosTaken + 1;
+        if (!LayoutSlotGuideService.TryGetLiveGuideSlotForPhoto(_parsedLayoutTemplate, photoIndex,
+                out var slot, out var duplicateSlots))
+        {
+            LiveSlotGuide.ClearGuide();
+            LiveSlotGuide.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (duplicateSlots > 1)
+        {
+            RuntimeLog.Info("Flow",
+                $"slot guide: photo {photoIndex} has {duplicateSlots} strip positions — showing one framing window for capture");
+        }
+
+        LiveSlotGuide.SetCaptureSlotSize(slot.Width, slot.Height);
+        LiveSlotGuide.Visibility = Visibility.Visible;
     }
 
     private void BuildShotDots()
@@ -342,10 +531,12 @@ public partial class PhotoboothFlowView : UserControl
     private void UpdateLimitsLine()
     {
         if (_session == null) return;
+        if (_workspace != null)
+            SyncActiveSessionPrintCountsIfSameFolder(_workspace.SessionRoot);
         var t =
             $"Photos {_session.PhotosTaken}/{_session.Layout.ShotCount} · " +
-            $"Prints this session {_session.PrintsThisSession}/{_session.Limits.MaxPrintsPerSession} · " +
-            $"Event prints {_session.PrintsTotalEvent}/{_session.Limits.MaxPrintsPerEvent}";
+            $"Print actions this session {_session.PrintsThisSession}/{_session.Limits.MaxPrintsPerSession} · " +
+            $"Event print actions {_session.PrintsTotalEvent}/{_session.Limits.MaxPrintsPerEvent}";
         LimitsLine.Text = t;
         LimitsLine.ToolTip = t;
     }
@@ -383,6 +574,7 @@ public partial class PhotoboothFlowView : UserControl
             _stepTimer?.Stop();
             if (token.IsCancellationRequested) return;
             IntroOverlay.Visibility = Visibility.Collapsed;
+            UpdateLiveSlotGuide();
             BeginPreRollOrCountdown();
         };
         _stepTimer.Start();
@@ -501,6 +693,7 @@ public partial class PhotoboothFlowView : UserControl
         _countdownValue = firstShot ? FirstShotCountdownSeconds : NextShotCountdownSeconds;
         CountdownText.Visibility = Visibility.Visible;
         CountdownText.Text = _countdownValue.ToString();
+        UpdateLiveSlotGuide();
 
         _stepTimer?.Stop();
         _stepTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -596,7 +789,6 @@ public partial class PhotoboothFlowView : UserControl
                 return;
             }
 
-            var sessionComplete = false;
             await Dispatcher.InvokeAsync(() =>
             {
                 if (token.IsCancellationRequested || _session == null) return;
@@ -607,55 +799,10 @@ public partial class PhotoboothFlowView : UserControl
                     return;
                 }
 
-                _session.PhotosTaken++;
-                RuntimeLog.Info("Flow", $"capture saved shot={_session.PhotosTaken}/{_session.Layout.ShotCount}");
-                BuildShotDots();
-                UpdateLimitsLine();
-
-                ShotStatusLine.Text = result.Ok
-                    ? $"Saved photo {_session.PhotosTaken} of {_session.Layout.ShotCount}"
-                    : $"Capture issue (shot {_session.PhotosTaken}) — check sony_bridge / USB.";
-
-                if (_session.PhotosTaken >= _session.Layout.ShotCount)
-                    sessionComplete = true;
-                else
-                    StartCurrentShot();
+                RuntimeLog.Info("Flow", $"capture saved shot={shotNumber} — showing {ShotReviewSeconds}s review");
+                ShowShotReview(result.LocalPath!, shotNumber);
             });
 
-            if (sessionComplete)
-            {
-                try
-                {
-                    await FinalizeSessionAndShowFinalAsync().ConfigureAwait(true);
-                }
-                catch (Exception ex)
-                {
-                    RuntimeLog.Error("Flow", $"FinalizeSessionAndShowFinalAsync crashed: {ex}");
-                    try
-                    {
-                        await Dispatcher.InvokeAsync(() =>
-                        {
-                            MessageBox.Show(
-                                "The session finished, but building or showing the final print failed.\n\n" +
-                                ex.Message +
-                                "\n\nDetails are in Documents\\LessRealBooth\\logs\\runtime_*.log",
-                                "BoothDesktop",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Error);
-                            FinalPreviewImage.Source = null;
-                            FinalPreviewImage.Visibility = Visibility.Collapsed;
-                            FinalPreviewPlaceholder.Visibility = Visibility.Visible;
-                            FinalPreviewPlaceholder.Text =
-                                "Could not build or show the composite. Check the runtime log.";
-                            ShowPanel(PanelFinal);
-                        });
-                    }
-                    catch (Exception ex2)
-                    {
-                        RuntimeLog.Error("Flow", $"error UI after finalize crash: {ex2.Message}");
-                    }
-                }
-            }
         }
         finally
         {
@@ -686,6 +833,117 @@ public partial class PhotoboothFlowView : UserControl
         finally
         {
             Interlocked.Exchange(ref _prefocusBusy, 0);
+        }
+    }
+
+    private void StopShotReview()
+    {
+        _shotReviewTimer?.Stop();
+        _shotReviewTimer = null;
+        _shotReviewShowing = false;
+        ShotReviewOverlay.Visibility = Visibility.Collapsed;
+        ShotReviewImage.Source = null;
+        LivePreviewImage.Visibility = Visibility.Visible;
+        LivePreviewHint.Visibility = Visibility.Visible;
+        UpdateLiveSlotGuide();
+    }
+
+    private void ShowShotReview(string localPath, int shotNumber)
+    {
+        _pendingReviewShotNumber = shotNumber;
+        _shotReviewShowing = true;
+        StopLivePolling();
+
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.UriSource = new Uri(localPath, UriKind.Absolute);
+            bmp.EndInit();
+            bmp.Freeze();
+            ShotReviewImage.Source = bmp;
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warn("Flow", $"shot review image: {ex.Message}");
+            ShotReviewImage.Source = null;
+        }
+
+        LivePreviewImage.Visibility = Visibility.Collapsed;
+        LivePreviewHint.Visibility = Visibility.Collapsed;
+        LiveSlotGuide.Visibility = Visibility.Collapsed;
+        ShotReviewOverlay.Visibility = Visibility.Visible;
+        ShotStatusLine.Text =
+            $"Photo {shotNumber} of {_session?.Layout.ShotCount} — tap Retake or wait {ShotReviewSeconds:0} sec…";
+
+        _shotReviewTimer?.Stop();
+        _shotReviewTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(ShotReviewSeconds) };
+        _shotReviewTimer.Tick += (_, _) => AcceptPendingShotAndContinue();
+        _shotReviewTimer.Start();
+    }
+
+    private void OnShotReviewRetakeClick(object sender, RoutedEventArgs e)
+    {
+        if (!_shotReviewShowing || _session == null || _flowCts == null) return;
+        RuntimeLog.Info("Flow", $"retake shot={_pendingReviewShotNumber} (same slot, replaces file)");
+        StopShotReview();
+        StartLivePolling();
+        ShotStatusLine.Text = $"Retaking photo {_pendingReviewShotNumber}…";
+        UpdateLiveSlotGuide();
+        StartCountdown();
+    }
+
+    private void AcceptPendingShotAndContinue()
+    {
+        if (!_shotReviewShowing || _session == null) return;
+        StopShotReview();
+        StartLivePolling();
+
+        _session.PhotosTaken++;
+        RuntimeLog.Info("Flow", $"photo accepted shot={_session.PhotosTaken}/{_session.Layout.ShotCount}");
+        BuildShotDots();
+        UpdateLimitsLine();
+        ShotStatusLine.Text = $"Photo {_session.PhotosTaken} of {_session.Layout.ShotCount} saved.";
+
+        if (_session.PhotosTaken >= _session.Layout.ShotCount)
+            _ = FinalizeSessionAfterReviewAsync();
+        else
+            StartCurrentShot();
+    }
+
+    private async Task FinalizeSessionAfterReviewAsync()
+    {
+        try
+        {
+            await FinalizeSessionAndShowFinalAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Error("Flow", $"FinalizeSessionAndShowFinalAsync crashed: {ex}");
+            try
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show(
+                        "The session finished, but building or showing the final print failed.\n\n" +
+                        ex.Message +
+                        "\n\nDetails are in Documents\\LessRealBooth\\logs\\runtime_*.log",
+                        "BoothDesktop",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    FinalPreviewImage.Source = null;
+                    FinalPreviewImage.Visibility = Visibility.Collapsed;
+                    FinalPreviewPlaceholder.Visibility = Visibility.Visible;
+                    FinalPreviewPlaceholder.Text =
+                        "Could not build or show the composite. Check the runtime log.";
+                    ShowPanel(PanelFinal);
+                });
+            }
+            catch (Exception ex2)
+            {
+                RuntimeLog.Error("Flow", $"error UI after finalize crash: {ex2.Message}");
+            }
         }
     }
 
@@ -852,8 +1110,65 @@ public partial class PhotoboothFlowView : UserControl
                     : $"Composite skipped: {errMsg}";
             }
 
+            ApplyFinalScreenPrintUi();
             ShowPanel(PanelFinal);
+            TryAutoPrintAfterSessionComplete(finalPath);
         });
+    }
+
+    private static SessionLimitConfig BuildSessionLimits(PrintBehaviorSettings behavior) =>
+        new()
+        {
+            MaxPhotosPerSession = 8,
+            MaxPrintsPerEvent = behavior.LimitPrints ? behavior.MaxPrintsPerEvent : 9999,
+            MaxPrintsPerSession = behavior.LimitPrints ? behavior.MaxPrintsPerSession : 99
+        };
+
+    private void ApplyFinalScreenPrintUi()
+    {
+        var showButton = GlobalSettingsService.Load().PrintBehavior.ShowPrintButton;
+        FinalPrintLimitBanner.Visibility = Visibility.Collapsed;
+
+        if (_workspace == null)
+        {
+            FinalPrintButton.Visibility = showButton ? Visibility.Visible : Visibility.Collapsed;
+            return;
+        }
+
+        SyncActiveSessionPrintCountsIfSameFolder(_workspace.SessionRoot);
+        UpdateLimitsLine();
+
+        var quota = SessionPrintService.Evaluate(_event.Id, _event.Name, _workspace.SessionRoot);
+        if (quota.LimitsEnabled && !quota.CanPrint)
+        {
+            FinalPrintButton.Visibility = Visibility.Collapsed;
+            FinalPrintLimitBanner.Text = quota.UserMessage;
+            FinalPrintLimitBanner.Visibility = Visibility.Visible;
+            return;
+        }
+
+        FinalPrintButton.Visibility = showButton ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void TryAutoPrintAfterSessionComplete(string? finalPath)
+    {
+        if (string.IsNullOrEmpty(finalPath) || _workspace == null) return;
+        if (!GlobalSettingsService.Load().PrintBehavior.PrintAutomatically) return;
+
+        if (!SessionPrintService.TryPrintSession(_event.Id, _event.Name, _workspace.SessionRoot, out var message))
+            RuntimeLog.Warn("Print", $"auto-print failed: {message}");
+
+        ApplyFinalScreenPrintUi();
+    }
+
+    private void SyncActiveSessionPrintCountsIfSameFolder(string sessionFolderAbs)
+    {
+        if (_session == null || _workspace == null) return;
+        if (!string.Equals(_workspace.SessionRoot, sessionFolderAbs, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _session.PrintsThisSession = SessionPrintService.GetSessionPrintActionsUsed(sessionFolderAbs);
+        _session.PrintsTotalEvent = EventPrintCounterService.LoadTotalPrints(_event.Id, _event.Name);
     }
 
     private void OnCancelSessionClick(object sender, RoutedEventArgs e)
@@ -890,21 +1205,50 @@ public partial class PhotoboothFlowView : UserControl
 
     private void OnPrintClick(object sender, RoutedEventArgs e)
     {
-        if (_session == null) return;
-        if (!_session.CanPrint)
+        if (_workspace == null) return;
+        TryGuestPrint(() =>
         {
-            MessageBox.Show(
-                !_session.CanPrintEvent
-                    ? "This event has reached its print limit."
-                    : "This session has used all included prints.",
-                "Print", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
+            if (!SessionPrintService.TryPrintSession(_event.Id, _event.Name, _workspace.SessionRoot, out var message))
+            {
+                MessageBox.Show(message, "Print", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
-        _session.PrintsThisSession++;
-        _session.PrintsTotalEvent++;
-        MessageBox.Show("Phase 6: send job to print station (4R vs strip).",
-            "Print queued (mock)", MessageBoxButton.OK, MessageBoxImage.Information);
+            SyncActiveSessionPrintCountsIfSameFolder(_workspace.SessionRoot);
+            ApplyFinalScreenPrintUi();
+        });
+    }
+
+    private bool IsGuestPrintOnCooldown() => DateTime.UtcNow < _guestPrintCooldownUntilUtc;
+
+    private void TryGuestPrint(Action print)
+    {
+        if (IsGuestPrintOnCooldown()) return;
+
+        _guestPrintCooldownUntilUtc = DateTime.UtcNow.AddSeconds(1);
+        SetGuestPrintButtonsEnabled(false);
+
+        print();
+
+        _guestPrintCooldownTimer?.Stop();
+        _guestPrintCooldownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _guestPrintCooldownTimer.Tick += OnGuestPrintCooldownElapsed;
+        _guestPrintCooldownTimer.Start();
+    }
+
+    private void OnGuestPrintCooldownElapsed(object? sender, EventArgs e)
+    {
+        _guestPrintCooldownTimer?.Stop();
+        _guestPrintCooldownUntilUtc = DateTime.MinValue;
+        SetGuestPrintButtonsEnabled(true);
+    }
+
+    private void SetGuestPrintButtonsEnabled(bool enabled)
+    {
+        if (FinalPrintButton.Visibility == Visibility.Visible)
+            FinalPrintButton.IsEnabled = enabled;
+        if (SessionDetailPrintButton.Visibility == Visibility.Visible)
+            SessionDetailPrintButton.IsEnabled = enabled;
     }
 
     private void OnExitClick(object sender, RoutedEventArgs e)

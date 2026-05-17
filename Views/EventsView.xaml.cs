@@ -12,6 +12,19 @@ namespace BoothDesktop.Views;
 
 public partial class EventsView : UserControl
 {
+    public static readonly DependencyProperty IsCameraReadyProperty =
+        DependencyProperty.Register(
+            nameof(IsCameraReady),
+            typeof(bool),
+            typeof(EventsView),
+            new PropertyMetadata(false));
+
+    public bool IsCameraReady
+    {
+        get => (bool)GetValue(IsCameraReadyProperty);
+        private set => SetValue(IsCameraReadyProperty, value);
+    }
+
     private readonly INavigationHost _nav;
     private readonly DispatcherTimer _cameraTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     private int _cameraProbeBusy;
@@ -47,6 +60,17 @@ public partial class EventsView : UserControl
     private void OnOpenBoothClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: BoothEventSummary ev }) return;
+
+        if (!IsCameraReady)
+        {
+            MessageBox.Show(
+                "Wait for the camera to connect.",
+                "Camera not ready",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
         _nav.EnterPhotobooth(ev);
     }
 
@@ -96,6 +120,10 @@ public partial class EventsView : UserControl
             return;
         }
 
+        var pruned = LayoutCatalogService.PruneMissingFromCatalog();
+        if (pruned > 0)
+            ReloadEventsList();
+
         var dlg = new EventLayoutSetupWindow(ev, owner);
         if (dlg.ShowDialog() == true)
             ReloadEventsList();
@@ -121,20 +149,21 @@ public partial class EventsView : UserControl
             CameraStatusTitle.Text = includeReconnectAttempt ? "Camera: reconnecting..." : "Camera: checking...";
             CameraStatusDetail.Text = "probing sony_bridge health";
             CameraStatusDot.Fill = new SolidColorBrush(Color.FromRgb(192, 144, 42));
+            SetCameraReady(false);
 
             if (includeReconnectAttempt)
                 await SonyBridgeLauncher.EnsureStartedAsync();
 
             var snap = await BridgeDiagnosticsService.ProbeAsync();
-            var txt = snap.HealthLine ?? "";
+            var ready = snap.IsReadyForCapture;
 
-            if (txt.Contains("connected=true", StringComparison.OrdinalIgnoreCase))
+            if (ready)
             {
                 CameraStatusTitle.Text = "Camera: detected";
                 CameraStatusDetail.Text = "ready for capture";
                 CameraStatusDot.Fill = new SolidColorBrush(Color.FromRgb(88, 186, 104));
             }
-            else if (txt.Contains("connected=false", StringComparison.OrdinalIgnoreCase))
+            else if (snap.HealthLine.Contains("connected=false", StringComparison.OrdinalIgnoreCase))
             {
                 CameraStatusTitle.Text = "Camera: not detected";
                 CameraStatusDetail.Text = "connect camera / check USB mode";
@@ -143,23 +172,32 @@ public partial class EventsView : UserControl
             else
             {
                 CameraStatusTitle.Text = "Camera: not recognized";
-                var hint = txt.Length > 140 ? txt[..140] + "…" : txt;
+                var hint = snap.HealthLine.Length > 140 ? snap.HealthLine[..140] + "…" : snap.HealthLine;
                 CameraStatusDetail.Text = string.IsNullOrWhiteSpace(hint)
                     ? "bridge not responding or /health JSON unexpected"
                     : hint;
                 CameraStatusDot.Fill = new SolidColorBrush(Color.FromRgb(210, 76, 76));
             }
+
+            SetCameraReady(ready);
         }
         catch (Exception ex)
         {
             CameraStatusTitle.Text = "Camera: not recognized";
             CameraStatusDetail.Text = ex.Message;
             CameraStatusDot.Fill = new SolidColorBrush(Color.FromRgb(210, 76, 76));
+            SetCameraReady(false);
         }
         finally
         {
             Interlocked.Exchange(ref _cameraProbeBusy, 0);
         }
+    }
+
+    private void SetCameraReady(bool ready)
+    {
+        IsCameraReady = ready;
+        CameraNotReadyWarning.Visibility = ready ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OnEventSettingsClick(object sender, RoutedEventArgs e)

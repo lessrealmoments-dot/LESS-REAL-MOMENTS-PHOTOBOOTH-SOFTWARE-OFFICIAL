@@ -33,7 +33,7 @@ public static class GlobalSettingsService
                 if (!File.Exists(SettingsPath))
                     return new GlobalAppSettings();
                 var json = File.ReadAllText(SettingsPath);
-                return JsonSerializer.Deserialize<GlobalAppSettings>(json, JsonOpts) ?? new GlobalAppSettings();
+                return Normalize(JsonSerializer.Deserialize<GlobalAppSettings>(json, JsonOpts) ?? new GlobalAppSettings());
             }
             catch
             {
@@ -53,14 +53,15 @@ public static class GlobalSettingsService
 
         try
         {
-            var clean = new GlobalAppSettings
+            var clean = Normalize(settings);
+            clean = new GlobalAppSettings
             {
-                StorageRootPath = string.IsNullOrWhiteSpace(settings.StorageRootPath)
+                StorageRootPath = string.IsNullOrWhiteSpace(clean.StorageRootPath)
                     ? null
-                    : Path.GetFullPath(settings.StorageRootPath.Trim()),
-                PreferredPrinterName = string.IsNullOrWhiteSpace(settings.PreferredPrinterName)
-                    ? null
-                    : settings.PreferredPrinterName.Trim()
+                    : Path.GetFullPath(clean.StorageRootPath.Trim()),
+                Printer1 = clean.Printer1,
+                Printer2 = clean.Printer2,
+                PrintBehavior = clean.PrintBehavior
             };
 
             if (!string.IsNullOrWhiteSpace(clean.StorageRootPath))
@@ -72,6 +73,7 @@ public static class GlobalSettingsService
                 var json = JsonSerializer.Serialize(clean, JsonOpts);
                 File.WriteAllText(SettingsPath, json);
             }
+
             return true;
         }
         catch (Exception ex)
@@ -80,4 +82,48 @@ public static class GlobalSettingsService
             return false;
         }
     }
+
+    private static GlobalAppSettings Normalize(GlobalAppSettings settings)
+    {
+        settings.Printer1 ??= new PrinterSlotSettings();
+        settings.Printer2 ??= new PrinterSlotSettings();
+        settings.PrintBehavior ??= new PrintBehaviorSettings();
+        settings.PrintBehavior.PrintSharpening = NormalizeSharpening(settings.PrintBehavior.PrintSharpening);
+        settings.PrintBehavior.MaxPrintsPerEvent = Math.Clamp(settings.PrintBehavior.MaxPrintsPerEvent, 1, 9999);
+        settings.PrintBehavior.MaxPrintsPerSession = Math.Clamp(settings.PrintBehavior.MaxPrintsPerSession, 1, 99);
+        settings.PrintBehavior.PrintDialogMaxCopies = Math.Clamp(settings.PrintBehavior.PrintDialogMaxCopies, 1, 99);
+        settings.Printer1.Copies = Math.Clamp(settings.Printer1.Copies, 1, 99);
+        settings.Printer2.Copies = Math.Clamp(settings.Printer2.Copies, 1, 99);
+
+        settings.Printer1.PrinterName = string.IsNullOrWhiteSpace(settings.Printer1.PrinterName)
+            ? null
+            : settings.Printer1.PrinterName.Trim();
+        settings.Printer2.PrinterName = string.IsNullOrWhiteSpace(settings.Printer2.PrinterName)
+            ? null
+            : settings.Printer2.PrinterName.Trim();
+
+        settings.Printer1.ProfileLabel = string.IsNullOrWhiteSpace(settings.Printer1.ProfileLabel)
+            ? null
+            : settings.Printer1.ProfileLabel.Trim();
+        settings.Printer2.ProfileLabel = string.IsNullOrWhiteSpace(settings.Printer2.ProfileLabel)
+            ? null
+            : settings.Printer2.ProfileLabel.Trim();
+
+        PrinterAlignmentResolver.NormalizeSlot(settings.Printer1);
+        PrinterAlignmentResolver.NormalizeSlot(settings.Printer2);
+
+        if (string.IsNullOrWhiteSpace(settings.Printer1.PrinterName)
+            && !string.IsNullOrWhiteSpace(settings.PreferredPrinterName))
+            settings.Printer1.PrinterName = settings.PreferredPrinterName.Trim();
+
+        settings.PreferredPrinterName = null;
+        return settings;
+    }
+
+    private static string NormalizeSharpening(string? value) =>
+        value switch
+        {
+            "None" or "Low" or "Medium" or "High" => value,
+            _ => "Medium"
+        };
 }

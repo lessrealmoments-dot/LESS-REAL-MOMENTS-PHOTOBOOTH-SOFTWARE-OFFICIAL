@@ -4,6 +4,8 @@ Use this doc to pick up work after a break. It reflects the **repo as of early 2
 
 For quick session continuity (goal + last checkpoint), open `docs/PROJECT_HANDOFF.md` first.
 
+**Image quality / libvips fork:** see `docs/IMAGE_QUALITY_HANDOFF.md`.
+
 ---
 
 ## Checkpoint — what already works
@@ -42,21 +44,44 @@ Standard dslrBooth export ZIPs are the source of truth:
 
 ## Phase 2 — Layout engine + event setup + camera hardening
 
-**Status: in progress** — compositor v1 shipped; live slot mask + per-event wizard remain.
+**Status: in progress** — compositor v1 + quality diagnostics shipped; **libvips compositor upgrade** is next fork; live slot mask + per-event wizard remain.
 
 **Done / partial**
 
 - HTTP + shared-memory integration with `sony_bridge` for live + capture + prefocus.
 - ZIP import, catalog JSON, recursive `preview.png` discovery, built-in zip preview support.
 - **Template composite (v1):** After the last capture, resolve layout pack (`catalog` extract, loose `Assets/Layouts/{id}`, or full **ZIP** extract under `%LocalAppData%\BoothDesktop\layout_pack_cache\`), parse flexible dslrBooth-style `template.xml` (`Photo` slots + static image elements), **center-crop** guest shots into `PhotoNumber` rects, draw static assets in Z/sequence order, write `session\final\composite.png` and set `session.json` → `finalCompositeRelativePath`.
+- **Composite quality diagnostics:** `[CompositeQuality]` logs per composite (sources, slot geometry, downscale warnings). PNG embeds **300 DPI** from template `ResolutionDpi`.
+- **Sample / smoke:** `tools/SampleLayoutCheck`; packs in `D:\PHOTOBOOTH SOFTWARE\sample layout`.
+
+**Phase 2b — Image quality (SHIPPED 2026-05-17) — see `IMAGE_QUALITY_HANDOFF.md` for full notes**
+
+1. **DONE** — Phase 0 telemetry: `[CompositeQuality]` reports `composeMs`, `workingSetBefore/After/Peak`, `decodedFromNative`, `effectivePx`, per-slot cover metrics.
+2. **DONE** — Phase 1 WPF RAM optimisation: JPEG shrink-on-load via `BitmapImage.DecodePixelWidth/Height` at 2× max slot edge; per-`PhotoNumber` decode cache. Photo decode dropped from ~60 MB to ~3 MB.
+3. **DONE** — Phase 2 libvips/NetVips backend: `Services/Vips/VipsTemplateCompositor.cs` uses `Image.Thumbnail` (Lanczos3 + JPEG shrink-on-load) and `Composite2(Over)`. Per-`PhotoNumber` decode cache parity with WPF path. `Services/Compositors.cs` facade routes between WPF and Vips via `PrintBehavior.UseVipsCompositor` (default `false`) and falls back to WPF automatically if libvips probe fails or render throws.
+4. **DONE** — A/B harness in `tools/SampleLayoutCheck`: `--ab --runs=N` renders both engines and prints MAE/RMSE/max diff/PSNR + file sizes. Verified PSNR ~32 dB on the DENHAR strip — visually identical, Lanczos3 vs Fant kernel difference only.
+5. **DONE** — `KeepAspect=False` cover-crop default for photos (was: stretch); designer-only `IsLocked` layers skipped; overlay alpha holes (`OverlayHoleBounds`) drive the actual photo destination rect.
+6. **NOT YET** — No sharpening pass (user explicitly deferred; Lanczos3 alone meets the bar).
+7. **NOT YET** — `final/composite_master.png` 2× export (was Phase 2 master goal; deprioritised pending real demand from digital/gallery track).
+
+**Phase 2c — libvips polish & default switch (NEXT)**
+
+Pre-requisites for flipping `UseVipsCompositor` to `true` by default:
+
+1. **Cap libvips operation cache** so peak working set stays flat across long sessions (`NetVips.Cache.MaxMem = 50_000_000`). Observed climb during A/B: 134 → 200 → 260 MB across 3 consecutive composes in the same process.
+2. **UI toggle** for `UseVipsCompositor` in `Views/GlobalSettingsWindow.xaml` so QA / operators don't have to edit `global_settings.json` by hand.
+3. **Port `OverlayHoleBounds` to libvips** (`vips_project` on the alpha band → bounding box) so the Vips path is fully WPF-free. Today it loads the overlay via WPF `BitmapImage` once per compose just for the alpha scan.
+4. **Soak test** on the booth PC: 50+ back-to-back composes at strip + 4R sizes; confirm no RAM growth, no file lock issues, no driver / OOM regressions.
+5. **Flip default** `UseVipsCompositor = true` after the soak. Mark `TemplateCompositor.cs` (WPF) as a future deletion candidate.
 
 **Still to build (priority order)**
 
-1. **Compile-from-Zip (finish before deep XML work):** Prove `final\composite.png` against your real packs—only files inside the pack + originals. Use `Documents\LessRealBooth\logs\runtime_*.log` (`[Composite]` lines) when a static asset or slot is skipped; asset paths fall back to **same file name anywhere under the pack** when exact relative paths do not match extract layout.
-2. **Template fidelity:** Extend `DslrTemplateParser` / draw order for real dslrBooth/Luma elements (text, rotation, alternate rect attributes) once compositing is visually close.
-3. **Live preview vs current slot:** Mask or frame live JPEG to the active slot when layout geometry is known.
-4. **New event wizard:** Name, caps, optional start asset hooks (add/rename events without hand-editing `events_registry.json`).
-5. **Optional:** QR payload / deep link stub for future gallery URL.
+1. **Phase 2c above** — finish libvips rollout.
+2. **Compile-from-Zip hardening:** `[Composite]` warnings; asset path fallbacks for odd ZIP layouts.
+3. **Template fidelity:** rotation, text elements, alternate rect attributes.
+4. **Live preview vs current slot:** mask live JPEG to active slot.
+5. **New event wizard:** events without hand-editing `events_registry.json`.
+6. **Optional:** QR / gallery stub (Phase 4); serve `composite_master.png` when present.
 
 ---
 
@@ -71,6 +96,7 @@ Standard dslrBooth export ZIPs are the source of truth:
 ## Phase 4 — Guest gallery (LAN)
 
 - Lightweight HTTP server on booth PC: list session, originals + final, downloads.
+- Prefer **`final/composite_master.png`** when present; fall back to `composite.png`.
 - QR: `http://<booth-ip>:<port>/session/<id>`.
 
 ---
@@ -83,7 +109,8 @@ Standard dslrBooth export ZIPs are the source of truth:
 
 ## Phase 6 — Print service
 
-- Companion on print PC: job queue (TCP or HTTP).
+- **Implemented (local):** Two virtual printers in Global settings (Windows queue + copies each). `template.xml` routes layouts to printer 1 or 2 (`SecondaryPrinter`, `PrintTo`, `PrinterNumber`, or a `Printing` child node — dslrBooth “secondary printer”). `BoothPrintService` prints composite PNG via native driver defaults.
+- **Still planned:** Companion on print PC: job queue (TCP or HTTP).
 - Route jobs by layout / template flags (e.g. 4R vs strip).
 
 ---

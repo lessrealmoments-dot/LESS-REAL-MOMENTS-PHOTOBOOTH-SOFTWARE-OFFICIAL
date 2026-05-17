@@ -16,6 +16,27 @@
             </Grid.RowDefinitions>
             <Border Grid.Row="0" Background="#59000000" Padding="12,10" BorderBrush="#55D4AF37" BorderThickness="0,0,0,1">
                 <DockPanel LastChildFill="False">
+                    <Button DockPanel.Dock="Left" Content="View sessions" MinHeight="36" MinWidth="130"
+                            FontSize="14" FontWeight="SemiBold" Margin="0,0,16,0"
+                            Foreground="{StaticResource Brush.Text}" Background="#4D252030"
+                            BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1" Padding="14,6" Cursor="Hand"
+                            Click="OnViewSessionsClick"
+                            ToolTip="Browse completed sessions for this event (print preview, raw photos, GIF)">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="bdVs" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="10" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bdVs" Property="Background" Value="#66252035"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
                     <TextBlock DockPanel.Dock="Left" Text="Operator" VerticalAlignment="Center"
                                Foreground="{StaticResource Brush.TextMuted}" FontSize="13" Opacity="0.9"/>
                     <Button DockPanel.Dock="Right" Content="← Back to Events" MinHeight="40" MinWidth="160"
@@ -126,45 +147,39 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Button Margin="12" Padding="0" Click="OnLayoutCardClick" Tag="{Binding}"
+                                    ToolTip="{Binding DisplayName}"
                                     Background="Transparent" BorderThickness="0" Cursor="Hand">
-                                <Border CornerRadius="20" Background="{StaticResource Brush.Card}" BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1" Width="380" Height="480">
+                                <Border CornerRadius="20" Background="{StaticResource Brush.Card}" BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1" Width="340" Height="440" ClipToBounds="True">
                                     <Border.Effect>
                                         <DropShadowEffect BlurRadius="20" ShadowDepth="0" Opacity="0.3" Color="#000000"/>
                                     </Border.Effect>
-                                    <Grid>
-                                        <Grid Margin="16,16,16,72" Height="280" VerticalAlignment="Top">
-                                            <controls:LayoutMiniPreview PreviewKey="{Binding PreviewKey}"
-                                                                       VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                <controls:LayoutMiniPreview.Style>
-                                                    <Style TargetType="controls:LayoutMiniPreview">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding HasPreviewFile}" Value="True">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </controls:LayoutMiniPreview.Style>
-                                            </controls:LayoutMiniPreview>
-                                            <Image Stretch="Uniform" MaxHeight="270" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                                   Source="{Binding ResolvedPreviewPath, Converter={StaticResource FilePathToImage}}">
-                                                <Image.Style>
-                                                    <Style TargetType="Image">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding HasPreviewFile}" Value="True">
-                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Image.Style>
-                                            </Image>
-                                        </Grid>
-                                        <StackPanel VerticalAlignment="Bottom" Margin="20">
-                                            <TextBlock Text="{Binding DisplayName}" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text}"/>
-                                            <TextBlock Foreground="{StaticResource Brush.TextMuted}" FontSize="15" Margin="0,6,0,0"
-                                                       Text="{Binding ShotCount, StringFormat={}{0} photos}"/>
-                                        </StackPanel>
+                                    <Grid Margin="12">
+                                        <controls:LayoutMiniPreview PreviewKey="{Binding PreviewKey}"
+                                                                   VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <controls:LayoutMiniPreview.Style>
+                                                <Style TargetType="controls:LayoutMiniPreview">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasPreviewFile}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </controls:LayoutMiniPreview.Style>
+                                        </controls:LayoutMiniPreview>
+                                        <Image Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                               Source="{Binding ResolvedPreviewPath, Converter={StaticResource FilePathToImage}}">
+                                            <Image.Style>
+                                                <Style TargetType="Image">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasPreviewFile}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Image.Style>
+                                        </Image>
                                     </Grid>
                                 </Border>
                             </Button>
@@ -213,6 +228,10 @@
                     <Grid>
                         <Border Background="{StaticResource Brush.FakeLiveView}"/>
                         <Image x:Name="LivePreviewImage" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <controls:LiveSlotGuideOverlay x:Name="LiveSlotGuide" Panel.ZIndex="4"
+                                                  HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                                  IsHitTestVisible="False" Visibility="Collapsed"
+                                                  DimOpacity="0.8"/>
                         <TextBlock x:Name="LivePreviewHint" Text="Waiting for camera…&#x0a;Start sony_bridge.exe — live feed from&#x0a;http://127.0.0.1:18080/live.jpg"
                                    TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"
                                    Foreground="{StaticResource Brush.TextMuted}" FontSize="17" LineHeight="24"/>
@@ -232,6 +251,17 @@
                         </TextBlock>
                         <!-- Flash -->
                         <Border x:Name="FlashOverlay" Background="White" Opacity="0" IsHitTestVisible="False"/>
+                        <!-- Post-capture review (3s) + retake this shot only -->
+                        <Border x:Name="ShotReviewOverlay" Visibility="Collapsed" Background="#E6000000" Panel.ZIndex="60">
+                            <Grid>
+                                <Image x:Name="ShotReviewImage" Stretch="UniformToFill"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Button x:Name="ShotReviewRetakeButton" Content="Retake" Click="OnShotReviewRetakeClick"
+                                        Style="{StaticResource Style.GhostButton}" Padding="18,12" FontSize="16" FontWeight="SemiBold"
+                                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20,20,0,0"
+                                        Panel.ZIndex="2"/>
+                            </Grid>
+                        </Border>
                     </Grid>
                 </Border>
             </Grid>
@@ -250,6 +280,126 @@
                 <MediaElement x:Name="PreRollVideo" LoadedBehavior="Manual" UnloadedBehavior="Manual" Stretch="Uniform"
                               MediaEnded="OnPreRollMediaEnded" MediaFailed="OnPreRollMediaFailed"/>
             </Grid>
+        </Grid>
+
+        <!-- Session gallery (in-window; thumbnails only) -->
+        <Grid x:Name="PanelSessions" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Background="#59000000" Padding="12,10" BorderBrush="#55D4AF37" BorderThickness="0,0,0,1">
+                <Button Content="← Back" MinHeight="36" MinWidth="100" HorizontalAlignment="Left"
+                        FontSize="14" FontWeight="SemiBold"
+                        Foreground="{StaticResource Brush.Text}" Background="#4D252030"
+                        BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1" Padding="14,6" Cursor="Hand"
+                        Click="OnSessionsBackClick">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bdSessBack" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="10" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bdSessBack" Property="Background" Value="#66252035"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Border>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="28,24">
+                <ItemsControl x:Name="SessionsGrid">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Margin="10" Padding="0" Click="OnSessionCardClick" Tag="{Binding}"
+                                    Background="Transparent" BorderThickness="0" Cursor="Hand">
+                                <Border Width="200" Height="268" CornerRadius="14" ClipToBounds="True"
+                                        Background="{StaticResource Brush.FakeLiveView}"
+                                        BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1">
+                                    <Image Stretch="UniformToFill"
+                                           Source="{Binding PreviewThumbAbs, Converter={StaticResource FilePathToImage}}"/>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Session detail (in-window; thumbnails only) -->
+        <Grid x:Name="PanelSessionDetail" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Background="#59000000" Padding="12,10" BorderBrush="#55D4AF37" BorderThickness="0,0,0,1">
+                <DockPanel LastChildFill="False">
+                    <Button DockPanel.Dock="Left" Content="← Back" MinHeight="36" MinWidth="100"
+                            FontSize="14" FontWeight="SemiBold"
+                            Foreground="{StaticResource Brush.Text}" Background="#4D252030"
+                            BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1" Padding="14,6" Cursor="Hand"
+                            Click="OnSessionDetailBackClick">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="bdDetBack" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="10" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bdDetBack" Property="Background" Value="#66252035"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="SessionDetailPrintButton" DockPanel.Dock="Right" Content="Print" MinHeight="36" MinWidth="100"
+                            Style="{StaticResource Style.PrimaryButton}" Padding="18,6" Cursor="Hand"
+                            Click="OnSessionDetailPrintClick"/>
+                </DockPanel>
+            </Border>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="32,20">
+                <StackPanel HorizontalAlignment="Center" MaxWidth="960">
+                    <TextBlock x:Name="SessionDetailPrintLimitText" Visibility="Collapsed" Margin="0,0,0,12"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="520"
+                               Foreground="{StaticResource Brush.Accent}" FontSize="14"/>
+                    <Border CornerRadius="16" ClipToBounds="True" Background="{StaticResource Brush.Card}"
+                            BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1" Margin="0,0,0,20">
+                        <Image x:Name="SessionDetailOverlay" Stretch="Uniform" MaxHeight="520"/>
+                    </Border>
+                    <Border CornerRadius="12" ClipToBounds="True" Background="{StaticResource Brush.Card}"
+                            BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1" Margin="0,0,0,20"
+                            HorizontalAlignment="Center">
+                        <Image x:Name="SessionDetailGif" Stretch="Uniform" MaxHeight="220" MaxWidth="360"/>
+                    </Border>
+                    <ItemsControl x:Name="SessionDetailRaws">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="120" Height="150" Margin="6" CornerRadius="10" ClipToBounds="True"
+                                        Background="{StaticResource Brush.FakeLiveView}"
+                                        BorderBrush="{StaticResource Brush.Stroke}" BorderThickness="1">
+                                    <Image Stretch="UniformToFill"
+                                           Source="{Binding Converter={StaticResource FilePathToImage}}"/>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <!-- Final -->
@@ -272,10 +422,15 @@
                     </Grid>
                 </Viewbox>
             </Border>
-            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button Content="New guest" Style="{StaticResource Style.GhostButton}" Margin="0,0,16,0" Click="OnNewGuestClick"/>
-                <Button Content="Share" Style="{StaticResource Style.GhostButton}" Margin="0,0,16,0" Click="OnShareClick"/>
-                <Button Content="Print" Style="{StaticResource Style.PrimaryButton}" Click="OnPrintClick"/>
+            <StackPanel Grid.Row="2" HorizontalAlignment="Center">
+                <TextBlock x:Name="FinalPrintLimitBanner" Visibility="Collapsed" Margin="0,0,0,12"
+                           TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560"
+                           Foreground="{StaticResource Brush.Accent}" FontSize="15"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button Content="New guest" Style="{StaticResource Style.GhostButton}" Margin="0,0,16,0" Click="OnNewGuestClick"/>
+                    <Button Content="Share" Style="{StaticResource Style.GhostButton}" Margin="0,0,16,0" Click="OnShareClick"/>
+                    <Button x:Name="FinalPrintButton" Content="Print" Style="{StaticResource Style.PrimaryButton}" Click="OnPrintClick"/>
+                </StackPanel>
             </StackPanel>
         </Grid>
     </Grid>
