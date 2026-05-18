@@ -3,7 +3,7 @@
 **Read first when continuing work on sharper composites / libvips.**  
 Companion docs: `PROJECT_HANDOFF.md` (session checkpoint), `PHOTOBOOTH_PHASES.md` (roadmap).
 
-Last updated: **2026-05-17** (Phase 2 NetVips compositor shipped behind feature flag; Phase 2c cache cap + UI toggle shipped)
+Last updated: **2026-05-17** (Phase 2 NetVips compositor shipped behind feature flag; Phase 2c cache cap + UI toggle + libvips-native OverlayHoleBounds shipped)
 
 ---
 
@@ -188,7 +188,7 @@ Vips runs ~25 % slower wall time and uses ~50 MB more RSS than WPF on this layou
 |---|---|---|
 | **Cap libvips operation cache** | **SHIPPED** | `Cache.MaxMem = 50 MB`, `Cache.Max = 20 ops` set in `VipsTemplateCompositor._available` Lazy probe. Verified: peak WS went from 134->200->260 MB (unbounded) to 126->160->162->166 MB (steady ~165 MB) across 4 back-to-back composes. Logged at init: `libvips ready version=8.18.2 cacheMaxMem=50MB cacheMaxOps=20`. |
 | **UI toggle in Global Settings** | **SHIPPED** | New "Image quality (composite engine)" section in `Views/GlobalSettingsWindow.xaml` with `UseVipsCompositorCheck` checkbox. Status hint underneath shows libvips probe result. Saved through the existing `GlobalSettingsService.TrySave` path. |
-| **Port `OverlayHoleBounds` to libvips** | TODO | Today the Vips path loads the overlay once per compose via WPF `BitmapImage` just for the alpha scan. Port to `vips_project` on the alpha band so Vips path is fully WPF-free. |
+| **Port `OverlayHoleBounds` to libvips** | **SHIPPED** | New `Services/Vips/VipsOverlayHoleBounds.cs`. Extracts the overlay's alpha band once per compose (materialised in RAM via `WriteToMemory` + `NewFromMemory`); per slot crops the alpha, builds a binary hole mask via `image < 200`, validates min-pixel / min-area thresholds with `mask.Avg()`, then `FindTrim(background: [0])` returns the bounding box. Vips path now has zero WPF imaging dependency. Verified bit-identical pixel diff to the WPF-helper version (MAE 2.369, PSNR 31.93 dB unchanged); warm Vips run actually went from ~1012 ms / 181 MB peak to **~952 ms / 173 MB peak** by removing the WPF `BitmapImage` load and managed byte[] copy. |
 | **Soak test on booth PC** | TODO | 50+ back-to-back composes at strip + 4R; confirm cache cap holds, no driver/OOM regressions. |
 | **Flip default `UseVipsCompositor = true`** | TODO | After soak. Mark `TemplateCompositor.cs` (WPF) as a future deletion candidate. |
 

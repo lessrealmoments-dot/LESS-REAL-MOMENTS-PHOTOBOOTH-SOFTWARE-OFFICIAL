@@ -70,7 +70,7 @@ Pre-requisites for flipping `UseVipsCompositor` to `true` by default:
 
 1. **DONE** — Cap libvips operation cache (`Cache.MaxMem = 50 MB`, `Cache.Max = 20 ops` in `VipsTemplateCompositor._available`). Verified: peak WS went from 134→200→260 MB (unbounded) to 126→160→162→166 MB (steady) across 4 back-to-back composes.
 2. **DONE** — UI toggle in Global Settings → "Image quality (composite engine)" section with `UseVipsCompositor` checkbox + live libvips probe status hint. Persisted through `GlobalSettingsService.TrySave`.
-3. **TODO** — Port `OverlayHoleBounds` to libvips (`vips_project` on the alpha band → bounding box) so the Vips path is fully WPF-free. Today it loads the overlay via WPF `BitmapImage` once per compose just for the alpha scan.
+3. **DONE** — Port `OverlayHoleBounds` to libvips. New `Services/Vips/VipsOverlayHoleBounds.cs` extracts the overlay's alpha band once per compose, then per slot does `image < 200 → FindTrim(background: [0])` to get the hole bbox. Vips path now has zero WPF imaging dependency. Verified pixel-diff bit-identical to the WPF-helper version (MAE 2.369, PSNR 31.93 dB unchanged) and warm Vips run improved from ~1012 ms / 181 MB peak to ~952 ms / 173 MB peak.
 4. **TODO** — Soak test on the booth PC: 50+ back-to-back composes at strip + 4R sizes; confirm no RAM growth, no file lock issues, no driver / OOM regressions.
 5. **TODO** — Flip default `UseVipsCompositor = true` after the soak. Mark `TemplateCompositor.cs` (WPF) as a future deletion candidate.
 

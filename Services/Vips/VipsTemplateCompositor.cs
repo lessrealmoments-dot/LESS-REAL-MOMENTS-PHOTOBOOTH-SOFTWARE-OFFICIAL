@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
-using System.Windows.Media.Imaging;
 using NetVips;
 
 namespace BoothDesktop.Services.Vips;
@@ -16,9 +15,8 @@ namespace BoothDesktop.Services.Vips;
 ///   * Lanczos3 resampling for the final refinement step (sharper than WPF Fant at &gt;4ù downscales),
 ///   * streaming / tile-based memory model (~tens of MB instead of decoding the full 15 MP bitmap).
 ///
-/// OverlayHoleBounds still uses a WPF BitmapImage load for the alpha scan ù this is a single,
-/// canvas-sized load per composite and is cheap. Phase 3+ can port it to libvips so the Vips
-/// path becomes fully WPF-free.
+/// Overlay alpha-hole detection runs through VipsOverlayHoleBounds (fully libvips-native);
+/// the Vips path has zero WPF / BitmapSource dependency in the hot path.
 /// </summary>
 public static class VipsTemplateCompositor
 {
@@ -108,9 +106,10 @@ public static class VipsTemplateCompositor
 
             var orderedLayers = template.Layers.OrderBy(l => l.Z).ThenBy(l => l.Sequence).ToList();
 
-            // Overlay alpha-hole detection: keep WPF here for parity with the WPF compositor's
-            // proven behaviour. One cheap load per composite.
-            BitmapSource? frameOverlay = null;
+            // Overlay alpha-hole detection runs fully through libvips: load the highest-Z static
+            // overlay, extract its alpha band, materialise it once, then crop+Less+FindTrim per
+            // slot. No WPF BitmapSource, no managed pixel-array copy.
+            Image? overlayAlpha = null;
             var overlayLayer = orderedLayers
                 .Where(l => !l.IsPhotoSlot && !l.IsLocked && !string.IsNullOrEmpty(l.RelativeImagePath))
                 .OrderByDescending(l => l.Z)
@@ -120,7 +119,18 @@ public static class VipsTemplateCompositor
             {
                 var overlayPath = LayoutPackService.ResolvePackAssetFile(packRoot, overlayLayer.RelativeImagePath!);
                 if (overlayPath != null)
-                    TryLoadBitmapSourceForHoleScan(overlayPath, out frameOverlay);
+                {
+                    try
+                    {
+                        using var overlayImg = Image.NewFromFile(overlayPath, access: NetVips.Enums.Access.Sequential);
+                        overlayAlpha = VipsOverlayHoleBounds.PrepareAlphaBand(overlayImg);
+                    }
+                    catch (Exception ex)
+                    {
+                        RuntimeLog.Warn(LogSource,
+                            $"hole-bounds alpha load failed path={overlayPath} err={ex.Message} (slot rects will be used as-is)");
+                    }
+                }
             }
 
             // White opaque RGBA canvas. NewFromImage with a 4-double constant gives a 4-band image
@@ -156,7 +166,7 @@ public static class VipsTemplateCompositor
 
                     if (layer.IsPhotoSlot)
                     {
-                        canvas = DrawGuestPhoto(canvas, layer, slotRect, frameOverlay,
+                        canvas = DrawGuestPhoto(canvas, layer, slotRect, overlayAlpha,
                             photoNumberToOriginalPath, photoTargetEdges, photoCache,
                             templateDpi, report);
                     }
@@ -180,6 +190,7 @@ public static class VipsTemplateCompositor
                 foreach (var cached in photoCache.Values) cached.Working.Dispose();
                 photoCache.Clear();
                 canvas.Dispose();
+                overlayAlpha?.Dispose();
             }
 
             stopwatch.Stop();
@@ -202,7 +213,7 @@ public static class VipsTemplateCompositor
     }
 
     private static Image DrawGuestPhoto(Image canvas, TemplateLayer layer, Rect slotRect,
-        BitmapSource? frameOverlay, IReadOnlyDictionary<int, string> photoMap,
+        Image? overlayAlpha, IReadOnlyDictionary<int, string> photoMap,
         IReadOnlyDictionary<int, int> photoTargetEdges, Dictionary<int, CachedPhoto> photoCache,
         int templateDpi, CompositeQualityReport report)
     {
@@ -217,8 +228,8 @@ public static class VipsTemplateCompositor
         }
 
         var dest = slotRect;
-        if (frameOverlay != null
-            && OverlayHoleBounds.TryGetHoleRect(frameOverlay, slotRect, out var holeRect))
+        if (overlayAlpha != null
+            && VipsOverlayHoleBounds.TryGetHoleRect(overlayAlpha, slotRect, out var holeRect))
             dest = holeRect;
 
         var destX = (int)Math.Round(dest.X);
@@ -300,8 +311,8 @@ public static class VipsTemplateCompositor
             }
 
             // Image.Thumbnail with Size.Down + no crop = fit-within at the supersample edge.
-            // For square-ish layouts the result is approximately targetMaxEdge ◊ targetMaxEdge*aspect.
-            // We do NOT pass crop here so the cached image keeps its native aspect ó the per-slot
+            // For square-ish layouts the result is approximately targetMaxEdge ù targetMaxEdge*aspect.
+            // We do NOT pass crop here so the cached image keeps its native aspect ù the per-slot
             // ThumbnailImage below applies the centre crop for each slot's specific aspect ratio.
             using var thumb = Image.Thumbnail(path, targetMaxEdge, height: targetMaxEdge,
                 size: NetVips.Enums.Size.Down);
@@ -418,26 +429,5 @@ public static class VipsTemplateCompositor
 
         canvas.Dispose();
         return newCanvas;
-    }
-
-    private static bool TryLoadBitmapSourceForHoleScan(string path, out BitmapSource? bmp)
-    {
-        bmp = null;
-        try
-        {
-            var b = new BitmapImage();
-            b.BeginInit();
-            b.UriSource = new Uri(path, UriKind.Absolute);
-            b.CacheOption = BitmapCacheOption.OnLoad;
-            b.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            b.EndInit();
-            b.Freeze();
-            bmp = b;
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
     }
 }
